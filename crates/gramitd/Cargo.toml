@@ -20,7 +20,7 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 interprocess = { version = "2.4.3", features = ["tokio"] }
 tracing-appender = "0.2.5"
-gramit-input = { version = "0.1.0", path = "../gramit-input" }
+gramit-input = { path = "../gramit-input" }
 async-trait = "0.1.92"
 notify-rust = "4.17.0"
 
