@@ -1,0 +1,30 @@
+[package]
+name = "gramit-input"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Platform clipboard, hotkey, and keystroke injection for gramit"
+
+[dependencies]
+gramit-core = { path = "../gramit-core" }
+async-trait = "0.1"
+arboard = { version = "3.6", default-features = false }
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+ashpd = { version = "0.13", default-features = false, features = ["tokio", "remote_desktop", "global_shortcuts", "screencast"] }
+futures-util = "0.3"
+
+[target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
+crossbeam-channel = "0.5.16"
+enigo = "0.6"
+global-hotkey = "0.7"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation"] }
+
+[dev-dependencies]
+tracing-subscriber = { workspace = true, features = ["fmt"] }

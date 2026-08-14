@@ -1,0 +1,23 @@
+[package]
+name = "gramit-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "gramit command line interface"
+
+[[bin]]
+name = "gramit"
+path = "src/main.rs"
+
+[dependencies]
+gramit-core = { path = "../gramit-core" }
+gramit-input = { path = "../gramit-input" }
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+toml = "1.0"
+clap = { version = "4", features = ["derive"] }
+interprocess = { version = "2.4", features = ["tokio"] }
+notify-rust = "4"

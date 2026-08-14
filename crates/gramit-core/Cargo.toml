@@ -1,0 +1,17 @@
+[package]
+name = "gramit-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Shared config, IPC protocol, and backend client for gramit"
+
+[dependencies]
+directories = "6.0.0"
+reqwest = { version = "0.13.3", default-features = false, features = ["json"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["rt", "time"] }
+toml = "1.0.7"
+tracing.workspace = true
