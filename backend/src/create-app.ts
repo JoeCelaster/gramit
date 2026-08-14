@@ -1,3 +1,6 @@
+// Named create-app rather than app on purpose: Vercel picks a deployment's server
+// entrypoint by searching the build output for app.js before index.js, and would
+// otherwise start this module — which exports a factory and never listens.
 import express, { type NextFunction, type Request, type Response } from 'express';
 import type { Config } from './config.js';
 import { AppError, toErrorBody } from './errors.js';

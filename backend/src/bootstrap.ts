@@ -1,5 +1,5 @@
 import type { Express } from 'express';
-import { createApp } from './app.js';
+import { createApp } from './create-app.js';
 import { loadConfigFromDotenv, type Config } from './config.js';
 import { createAzureCorrector } from './llm/azure.js';
 import { log } from './logger.js';
@@ -10,10 +10,8 @@ export interface Bootstrapped {
   config: Config;
 }
 
-/** Wires config → corrector → service → app without binding a port, so the long-lived
- *  server (`index.ts`) and the serverless handler (`api/index.js`) share one code path.
- *  A serverless function is handed a request, not a port, so `listen` has to stay out
- *  of here — calling it is what makes a Vercel deployment fail to invoke. */
+/** Wires config → corrector → service → app without binding a port, so tests and any
+ *  future non-listening host can build the same app `index.ts` serves. */
 export function bootstrap(): Bootstrapped {
   const config = loadConfigFromDotenv();
 

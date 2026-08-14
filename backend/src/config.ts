@@ -56,7 +56,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       : null;
 
   return {
-    host: env.HOST?.trim() || '127.0.0.1',
+    // Loopback everywhere by default: this process holds the API key and must not be
+    // reachable from the LAN. Vercel is the exception — it runs the app as a real server
+    // and proxies to it, so binding loopback there makes every request time out.
+    host: env.HOST?.trim() || (env.VERCEL ? '0.0.0.0' : '127.0.0.1'),
     port: intFromEnv('PORT', 8787),
     azure,
     missingAzureVars: [...missingAzureVars],
