@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=gramit
+Comment=Fix grammar in the current selection
+Exec=gramitd
+Icon=accessories-text-editor
+Terminal=false
+NoDisplay=true
+Categories=Utility;
+StartupNotify=false

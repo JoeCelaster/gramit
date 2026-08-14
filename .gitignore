@@ -1,0 +1,11 @@
+# Node
+node_modules/
+dist/
+*.log
+
+# Secrets
+.env
+.env.local
+
+# Rust
+target/
