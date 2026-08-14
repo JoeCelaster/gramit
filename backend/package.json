@@ -5,7 +5,7 @@
   "description": "gramit backend \u2014 the only component that holds an API key; corrects grammar via Azure OpenAI",
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": "22.x"
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -29,7 +29,7 @@
     "@types/supertest": "^7.2.1",
     "supertest": "^7.2.2",
     "tsx": "^4.23.12",
-    "typescript": "^7.0.2",
+    "typescript": "^5.9.3",
     "vitest": "^4.1.10"
   }
 }
