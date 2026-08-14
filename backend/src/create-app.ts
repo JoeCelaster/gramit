@@ -27,9 +27,10 @@ function normalizeError(err: unknown): AppError {
   return new AppError('INTERNAL', 500, err instanceof Error ? err.message : 'Unexpected error.');
 }
 
-export function createApp({ config, service }: AppOptions): express.Express {
-  const app = express();
-
+/** `app` is a parameter so the entrypoint can own the express instance — Vercel decides
+ *  a deployment is a Node server by finding an express import in the entrypoint file
+ *  itself, and does not follow the import graph to get here. */
+export function createApp({ config, service }: AppOptions, app: express.Express = express()): express.Express {
   app.disable('x-powered-by');
   // A correction request is text; 2mb is generous and keeps a runaway client cheap.
   app.use(express.json({ limit: '2mb' }));
