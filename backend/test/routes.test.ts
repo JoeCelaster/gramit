@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
-import { createApp } from '../src/app.js';
+import { createApp } from '../src/create-app.js';
 import { loadConfig, type Config } from '../src/config.js';
 import { AppError } from '../src/errors.js';
 import type { FixService } from '../src/service.js';

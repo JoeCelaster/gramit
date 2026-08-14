@@ -1,5 +1,8 @@
-import { createApp } from './app.js';
+// The deployment entrypoint. Vercel scans this file for an express import to decide it
+// is a Node server, so the instance is created here rather than inside createApp.
+import express from 'express';
 import { loadConfigFromDotenv } from './config.js';
+import { createApp } from './create-app.js';
 import { createAzureCorrector } from './llm/azure.js';
 import { log } from './logger.js';
 import { VERSION } from './routes/health.js';
@@ -12,7 +15,7 @@ if (!config.azure) {
   // response and `gramit doctor` can say exactly what to fix.
   log.error('Azure OpenAI is not configured — /v1/fix will fail with NO_API_KEY', {
     missing: config.missingAzureVars.join(', '),
-    hint: 'copy backend/.env.example to backend/.env and fill it in',
+    hint: 'copy backend/.env.example to backend/.env and fill it in (or set the vars in the Vercel project)',
   });
 }
 
@@ -24,7 +27,7 @@ const service = createFixService({
   missingAzureVars: config.missingAzureVars,
 });
 
-const app = createApp({ config, service });
+const app = createApp({ config, service }, express());
 
 const server = app.listen(config.port, config.host, () => {
   log.info('gramit backend listening', {
