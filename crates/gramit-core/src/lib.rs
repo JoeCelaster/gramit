@@ -8,7 +8,7 @@ pub mod error;
 pub mod ipc;
 pub mod paths;
 
-pub use config::{Capture, Config, Mode};
+pub use config::{default_backend_url, Capture, Config, Mode, DEFAULT_BACKEND_URL};
 pub use error::{BackendError, ConfigError};
 
 /// Version reported by `Ping` and `Status`, so a stale daemon is obvious.

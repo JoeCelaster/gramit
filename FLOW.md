@@ -131,8 +131,12 @@ you highlighting text:
 
 ### 4. The correction round trip
 
-`crates/gramit-core/src/client.rs` → `POST http://127.0.0.1:8787/v1/fix`
+`crates/gramit-core/src/client.rs` → `POST <backend_url>/v1/fix`
 with `{"text": "...", "mode": "grammar"}`.
+
+`backend_url` comes from `config.toml`, defaulting to `backend.url` in the workspace
+`deploy.toml` — `crates/gramit-core/build.rs` bakes that in as
+`config::DEFAULT_BACKEND_URL`, the only place the address appears in the Rust code.
 
 In the backend (`backend/src/`):
 

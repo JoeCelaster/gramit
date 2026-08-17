@@ -5,6 +5,23 @@ use serde::{Deserialize, Serialize};
 use crate::error::ConfigError;
 use crate::paths;
 
+/// The backend every crate talks to, and the only place its address appears in the
+/// Rust sources. The value comes from `backend.url` in the workspace `deploy.toml`,
+/// read at build time by `build.rs` — deployments change it there, not in code.
+pub const DEFAULT_BACKEND_URL: &str = env!("GRAMIT_BACKEND_URL");
+
+/// The backend address a fresh config starts with.
+///
+/// `GRAMIT_BACKEND_URL` is honoured at run time as well as at build time, so a
+/// developer can aim the daemon at a local backend for one run without rebuilding.
+/// An explicit `backend_url` in `config.toml` still wins over both.
+pub fn default_backend_url() -> String {
+    match std::env::var("GRAMIT_BACKEND_URL") {
+        Ok(url) if !url.trim().is_empty() => url.trim().to_string(),
+        _ => DEFAULT_BACKEND_URL.to_string(),
+    }
+}
+
 /// Where a selection is read from.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -71,6 +88,8 @@ pub struct Config {
     pub notifications: bool,
     /// Selections longer than this are refused before a request is made.
     pub max_chars: usize,
+    /// Budget for one correction. The default backend is remote, so this covers a
+    /// round trip plus the model's own latency, not just the model's.
     pub request_timeout_ms: u64,
 
     // Timings for the capture → correct → paste loop. Defaults are tuned for GNOME
@@ -96,11 +115,11 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             hotkey: "Ctrl+Alt+F".to_string(),
-            backend_url: "http://127.0.0.1:8787".to_string(),
+            backend_url: default_backend_url(),
             mode: Mode::Grammar,
             notifications: true,
             max_chars: 8_000,
-            request_timeout_ms: 10_000,
+            request_timeout_ms: 15_000,
             capture: Capture::Copy,
             // Generous on purpose: a Ctrl+Alt+F chord is commonly held 300-500ms, and
             // anything we inject while it is down arrives as Ctrl+Alt+C.
@@ -187,6 +206,17 @@ mod tests {
     #[test]
     fn defaults_are_valid() {
         Config::default().validate().expect("defaults must validate");
+    }
+
+    #[test]
+    fn the_default_backend_comes_from_deploy_toml() {
+        // Guards the rule this crate's build.rs exists to enforce: the address is
+        // configuration, so it arrives from deploy.toml rather than a literal here.
+        assert!(
+            DEFAULT_BACKEND_URL.starts_with("http://") || DEFAULT_BACKEND_URL.starts_with("https://"),
+            "GRAMIT_BACKEND_URL must be an absolute URL, got {DEFAULT_BACKEND_URL:?}"
+        );
+        assert_eq!(Config::default().backend_url, default_backend_url());
     }
 
     #[test]
