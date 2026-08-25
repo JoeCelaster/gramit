@@ -240,9 +240,11 @@ mod tests {
 
     #[test]
     fn round_trips_through_toml() {
-        let mut config = Config::default();
-        config.max_chars = 1234;
-        config.hotkey = "Ctrl+Alt+G".into();
+        let config = Config {
+            max_chars: 1234,
+            hotkey: "Ctrl+Alt+G".into(),
+            ..Config::default()
+        };
 
         let text = toml::to_string_pretty(&config).unwrap();
         assert_eq!(toml::from_str::<Config>(&text).unwrap(), config);
@@ -250,26 +252,23 @@ mod tests {
 
     #[test]
     fn rejects_a_url_without_a_scheme() {
-        let mut config = Config::default();
-        config.backend_url = "127.0.0.1:8787".into();
+        let config = Config { backend_url: "127.0.0.1:8787".into(), ..Config::default() };
         assert!(config.validate().is_err());
     }
 
     #[test]
     fn rejects_zero_limits() {
-        let mut config = Config::default();
-        config.max_chars = 0;
+        let config = Config { max_chars: 0, ..Config::default() };
         assert!(config.validate().is_err());
 
-        let mut config = Config::default();
-        config.request_timeout_ms = 0;
+        let config = Config { request_timeout_ms: 0, ..Config::default() };
         assert!(config.validate().is_err());
     }
 
     #[test]
     fn trims_trailing_slash_from_backend_url() {
-        let mut config = Config::default();
-        config.backend_url = "http://127.0.0.1:8787/".into();
+        let config =
+            Config { backend_url: "http://127.0.0.1:8787/".into(), ..Config::default() };
         assert_eq!(config.backend_url_trimmed(), "http://127.0.0.1:8787");
     }
 
@@ -281,8 +280,7 @@ mod tests {
 
     #[test]
     fn capture_round_trips_through_toml() {
-        let mut config = Config::default();
-        config.capture = Capture::Primary;
+        let config = Config { capture: Capture::Primary, ..Config::default() };
         let text = toml::to_string_pretty(&config).unwrap();
         assert!(text.contains("primary"), "{text}");
         assert_eq!(toml::from_str::<Config>(&text).unwrap().capture, Capture::Primary);
@@ -300,8 +298,7 @@ mod tests {
 
     #[test]
     fn rejects_a_zero_retry_interval() {
-        let mut config = Config::default();
-        config.copy_retry_interval_ms = 0;
+        let config = Config { copy_retry_interval_ms: 0, ..Config::default() };
         assert!(config.validate().is_err());
     }
 
@@ -316,8 +313,7 @@ mod tests {
     fn saves_and_reloads() {
         let dir = std::env::temp_dir().join(format!("gramit-test-{}", std::process::id()));
         let path = dir.join("config.toml");
-        let mut config = Config::default();
-        config.notifications = false;
+        let config = Config { notifications: false, ..Config::default() };
 
         config.save_to(&path).unwrap();
         assert_eq!(Config::load_from(&path).unwrap(), config);

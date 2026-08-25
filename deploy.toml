@@ -12,4 +12,3 @@
 # Where the daemon sends text to be corrected. Point it at a backend you run
 # yourself with "http://127.0.0.1:8787".
 url = "https://gramitaihuntd.vercel.app"
-x

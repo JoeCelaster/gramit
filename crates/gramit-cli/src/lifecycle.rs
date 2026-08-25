@@ -50,10 +50,24 @@ pub async fn start(foreground: bool) -> Result<()> {
         };
     }
 
-    Command::new(&binary)
+    let mut command = Command::new(&binary);
+    command
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stderr(Stdio::null());
+
+    // `gramitd` is a console-subsystem binary, so spawning it from anything that is
+    // not already a console — a shortcut, a login task — pops a black window that
+    // sits there for as long as the daemon runs. Give it no console at all; its
+    // output goes to the log file, and the three null pipes above cover the rest.
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const DETACHED_PROCESS: u32 = 0x0000_0008;
+        command.creation_flags(DETACHED_PROCESS);
+    }
+
+    command
         .spawn()
         .with_context(|| {
             format!(
