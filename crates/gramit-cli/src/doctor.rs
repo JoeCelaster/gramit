@@ -229,15 +229,21 @@ fn check_hotkey(
         .or_else(|| status.map(|report| report.hotkey.clone()))
         .unwrap_or_else(|| "Ctrl+Alt+F".to_string());
 
+    // `hotkey` stays the canonical config spelling — the GNOME fallback below binds
+    // against it. Only what the user reads goes through `display`.
+    let shown = gramit_input::hotkey_spec::display(&hotkey);
+
     if let Some(report) = status {
         if report.hotkey_registered {
-            findings.ok("hotkey", report.hotkey_detail.as_deref().unwrap_or(&hotkey));
+            let detail = report.hotkey_detail.as_deref().unwrap_or(&hotkey);
+            findings.ok("hotkey", &gramit_input::hotkey_spec::display(detail));
             return;
         }
     }
 
     #[cfg(target_os = "linux")]
     {
+        let _ = shown;
         check_gnome_keybinding(findings, &hotkey, apply_fixes);
     }
 
@@ -246,7 +252,7 @@ fn check_hotkey(
         let _ = apply_fixes;
         findings.fail(
             "hotkey",
-            &format!("{hotkey} is not registered — see `gramit logs` for the reason"),
+            &format!("{shown} is not registered — see `gramit logs` for the reason"),
         );
     }
 }

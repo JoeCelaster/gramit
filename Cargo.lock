@@ -820,7 +820,7 @@ dependencies = [
 
 [[package]]
 name = "gramit-cli"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -836,7 +836,7 @@ dependencies = [
 
 [[package]]
 name = "gramit-core"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "directories",
  "reqwest",
@@ -850,7 +850,7 @@ dependencies = [
 
 [[package]]
 name = "gramit-input"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "arboard",
  "ashpd",
@@ -869,7 +869,7 @@ dependencies = [
 
 [[package]]
 name = "gramitd"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "async-trait",

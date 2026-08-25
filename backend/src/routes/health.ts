@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { Config } from '../config.js';
 
-export const VERSION = '0.1.1';
+export const VERSION = '0.1.2';
 
 export function healthRouter(config: Config): Router {
   const router = Router();

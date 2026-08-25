@@ -2,9 +2,10 @@
 
 Fix your grammar from where you stay.
 
-Select text in any app — Chrome, Slack, a text editor — press `Ctrl+Alt+F`, and the
-selection is replaced in place with a corrected version. Grammar, spelling and
-punctuation only: your wording, voice and formatting are left alone.
+Select text in any app — Chrome, Slack, a text editor — press `Ctrl+Alt+F`
+(`Ctrl+Option+F` on a Mac, which has no Alt key), and the selection is replaced in
+place with a corrected version. Grammar, spelling and punctuation only: your wording,
+voice and formatting are left alone.
 
 ```
 gramit (CLI) ──local socket──> gramitd (daemon) ──HTTP──> backend ──> Azure OpenAI
@@ -147,7 +148,7 @@ gramit logs [-f] [-n N]       gramit doctor [--fix]
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `hotkey` | `Ctrl+Alt+F` | The shortcut that fixes the selection |
+| `hotkey` | `Ctrl+Alt+F` | The shortcut that fixes the selection. `Alt` means the Option (⌥) key on macOS; `Option` is accepted as a spelling too |
 | `backend_url` | *(none — you set it)* | Backend that corrects the text |
 | `mode` | `grammar` | Correction style |
 | `notifications` | `true` | Show a toast for each fix |
@@ -177,8 +178,12 @@ If typing stops working, the portal session is usually stuck:
 systemctl --user restart xdg-desktop-portal-gnome xdg-desktop-portal && gramit restart
 ```
 
-**macOS.** Needs Accessibility permission (System Settings → Privacy & Security →
-Accessibility) before it can type. Not yet run on real hardware.
+**macOS.** The hotkey is `Ctrl+Option+F` — Mac keyboards have no key labelled Alt,
+and `Ctrl+Alt+F` in the config means the same chord. Accessibility permission (System
+Settings → Privacy & Security → Accessibility) is required before gramit can type,
+and the daemon checks for it once at startup: **grant it, then run `gramit restart`**,
+or the hotkey stays unbound for the life of that daemon. `gramit doctor` says so if
+you forget.
 
 **Windows.** Needs no permissions. Not yet run on real hardware.
 

@@ -61,6 +61,20 @@ pub struct MainThreadHotkey {
     _manager: Option<crate::native::hotkey::Manager>,
 }
 
+impl MainThreadHotkey {
+    /// No registration was attempted, so there is nothing to keep alive.
+    ///
+    /// The daemon uses this when it has already decided not to bind: holding an OS
+    /// registration it cannot service would take the chord away from every other app
+    /// and do nothing with it.
+    pub fn unregistered() -> Self {
+        Self {
+            #[cfg(any(target_os = "windows", target_os = "macos"))]
+            _manager: None,
+        }
+    }
+}
+
 /// Registers the hotkey from the main thread, where the platform requires it.
 ///
 /// Windows delivers `WM_HOTKEY` to a window owned by the creating thread, and macOS

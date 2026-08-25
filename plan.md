@@ -279,7 +279,7 @@ One command, because the alternative is a README the user has to follow in order
   ✓ config          ~/Library/Application Support/gramit/config.toml (created)
   ✓ launch agent    installed and loaded (dev.gramit.gramitd)
   ✓ daemon          running, version 0.1.0 (pid 4183)
-  ✓ backend         https://gramit-backend.vercel.app
+  ✓ backend         your URL
   ⚠ accessibility   gramit needs permission to type into other apps.
 
     macOS just asked, or will ask now. In System Settings → Privacy &

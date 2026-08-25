@@ -140,10 +140,15 @@ pub fn print_report(report: &StatusReport) {
     println!("  {}  {}", ui::bold("uptime"), format_uptime(report.uptime_s));
 
     let hotkey = if report.hotkey_registered {
-        ui::green(report.hotkey_detail.as_deref().unwrap_or(&report.hotkey))
+        // Shown, not stored: on a Mac the configured `Ctrl+Alt+F` reads `Ctrl+Option+F`.
+        let detail = report.hotkey_detail.as_deref().unwrap_or(&report.hotkey);
+        ui::green(&gramit_input::hotkey_spec::display(detail))
     } else {
         // Not an error on Linux: the GNOME keybinding drives the same path.
-        ui::yellow(&format!("{} (not bound by the daemon)", report.hotkey))
+        ui::yellow(&format!(
+            "{} (not bound by the daemon)",
+            gramit_input::hotkey_spec::display(&report.hotkey)
+        ))
     };
     println!("  {}  {hotkey}", ui::bold("hotkey"));
 

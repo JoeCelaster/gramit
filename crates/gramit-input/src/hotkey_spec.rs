@@ -69,6 +69,13 @@ pub fn parse(hotkey: &str) -> Result<HotkeySpec, InputError> {
     Ok(HotkeySpec { modifiers, key })
 }
 
+/// How to spell `hotkey` for a human on this platform, falling back to the raw
+/// string when it does not parse — a bad config should show the user exactly what
+/// they wrote rather than nothing.
+pub fn display(hotkey: &str) -> String {
+    parse(hotkey).map(|spec| spec.display()).unwrap_or_else(|_| hotkey.to_string())
+}
+
 /// XKB spelling: lowercase letters, `F1`-style function keys, capitalised named keys.
 fn normalize_key(key: &str) -> String {
     let lower = key.to_ascii_lowercase();
@@ -96,6 +103,39 @@ impl HotkeySpec {
 
     pub fn key(&self) -> &str {
         &self.key
+    }
+
+    /// The spelling to show a user, e.g. `Ctrl+Alt+F` — or `Ctrl+Option+F` on macOS.
+    ///
+    /// Mac keyboards have no key labelled "Alt"; the one the user has to press is
+    /// Option (⌥). The config keeps `Ctrl+Alt+F` as its canonical spelling on every
+    /// platform, so this is a display concern only — never write the result back to
+    /// the config or compare it against what the user configured.
+    pub fn display(&self) -> String {
+        let mut out = String::new();
+        for modifier in &self.modifiers {
+            out.push_str(match modifier {
+                Modifier::Ctrl => "Ctrl",
+                Modifier::Alt if cfg!(target_os = "macos") => "Option",
+                Modifier::Alt => "Alt",
+                Modifier::Shift => "Shift",
+                Modifier::Super if cfg!(target_os = "macos") => "Cmd",
+                Modifier::Super if cfg!(target_os = "windows") => "Win",
+                Modifier::Super => "Super",
+            });
+            out.push('+');
+        }
+        out.push_str(&self.display_key());
+        out
+    }
+
+    /// Letters read better capitalised on a key cap; named keys keep their spelling.
+    fn display_key(&self) -> String {
+        if self.key.chars().count() == 1 {
+            self.key.to_ascii_uppercase()
+        } else {
+            self.key.clone()
+        }
     }
 
     /// XDG GlobalShortcuts trigger, e.g. `CTRL+ALT+f`.
@@ -243,5 +283,31 @@ mod tests {
     #[test]
     fn modifier_order_follows_the_users_spelling() {
         assert_eq!(parse("Alt+Ctrl+F").unwrap().portal_trigger(), "ALT+CTRL+f");
+    }
+
+    #[test]
+    fn displays_the_hotkey_with_platform_modifier_names() {
+        let spec = parse("Ctrl+Alt+F").unwrap();
+        let expected = if cfg!(target_os = "macos") { "Ctrl+Option+F" } else { "Ctrl+Alt+F" };
+        assert_eq!(spec.display(), expected, "Macs have no key labelled Alt");
+    }
+
+    #[test]
+    fn displays_named_and_function_keys_unchanged() {
+        assert_eq!(parse("Ctrl+F5").unwrap().display(), "Ctrl+F5");
+        assert_eq!(parse("Ctrl+Enter").unwrap().display(), "Ctrl+Return");
+    }
+
+    #[test]
+    fn display_falls_back_to_the_raw_string() {
+        // Unparseable, so the user sees what they actually wrote.
+        assert_eq!(display("Ctrl+"), "Ctrl+");
+        assert_eq!(display("nonsense"), "nonsense");
+    }
+
+    #[test]
+    fn display_never_changes_the_canonical_spelling() {
+        // The config is `Ctrl+Alt+F` everywhere; only the presentation moves.
+        assert_eq!(parse("Ctrl+Alt+F").unwrap().portal_trigger(), "CTRL+ALT+f");
     }
 }

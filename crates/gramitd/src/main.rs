@@ -85,20 +85,38 @@ fn main() -> Result<()> {
         .build()
         .context("could not start the async runtime")?;
 
-    // Windows and macOS require the hotkey manager to be created on the thread that
-    // pumps the event loop — this one. Linux returns None and registers later, via
-    // the portal, from the runtime. The guard keeps the manager alive on this thread.
     let config = match Config::load() {
         Ok(config) => config,
         Err(err) => return Err(anyhow::anyhow!(err)).context("could not load the gramit config"),
     };
-    let (_main_thread_hotkey, prebound) = hotkey::register_on_main_thread(&config.hotkey);
+
+    // Logging comes up before anything that can fail interestingly, so `gramit logs`
+    // has the reason.
+    let log_file = logging::init(args.foreground)?;
+    info!(version = VERSION, log = %log_file.display(), "gramitd starting");
+
+    // On Windows and macOS the selection machinery opens here, before the hotkey.
+    // Binding first and only then discovering we cannot service the shortcut is worse
+    // than never binding: the OS keeps routing the chord to us, so it stops reaching
+    // every other app while doing nothing here.
+    let selection = open_selection_early(&runtime);
+
+    // Windows and macOS require the hotkey manager to be created on the thread that
+    // pumps the event loop — this one. Linux returns None and registers later, via
+    // the portal, from the runtime. The guard keeps the manager alive on this thread.
+    let (_main_thread_hotkey, prebound) = match &selection {
+        Some(_) => hotkey::register_on_main_thread(&config.hotkey),
+        // Nothing to service the shortcut; `run` logs why. Holding no registration
+        // at all leaves the chord with whichever app the user expects to get it.
+        None if SELECTION_OPENED_EARLY => (hotkey::MainThreadHotkey::unregistered(), None),
+        None => hotkey::register_on_main_thread(&config.hotkey),
+    };
 
     let stop = Arc::new(AtomicBool::new(false));
     let daemon = {
         let stop = Arc::clone(&stop);
         runtime.spawn(async move {
-            let result = run(args, config, prebound).await;
+            let result = run(config, selection, prebound).await;
             // Release the pump whether the daemon stopped cleanly or failed.
             stop.store(true, Ordering::Relaxed);
             result
@@ -111,14 +129,10 @@ fn main() -> Result<()> {
 }
 
 async fn run(
-    args: Args,
     config: Config,
+    early_selection: Option<Selection>,
     prebound: Option<Result<HotkeyRegistration, gramit_input::InputError>>,
 ) -> Result<()> {
-
-    let log_file = logging::init(args.foreground)?;
-    info!(version = VERSION, log = %log_file.display(), "gramitd starting");
-
     let endpoint = paths::endpoint();
     let listener = endpoint::bind(&endpoint).await?;
     // A daemon with no backend is still worth starting: it answers IPC, so `gramit
@@ -141,7 +155,8 @@ async fn run(
     // The selection machinery and the hotkey are both optional: without them the
     // daemon still answers IPC, so `gramit fix` works and `gramit doctor` can say
     // exactly what is missing instead of the daemon just refusing to start.
-    let selection = open_selection().await;
+    let selection = if SELECTION_OPENED_EARLY { early_selection } else { open_selection().await };
+
     let registration = match &selection {
         Some(_) => match prebound {
             // Already attempted on the main thread (Windows/macOS).
@@ -188,6 +203,27 @@ async fn run(
         Err(err) => error!(%err, "gramitd stopped with an error"),
     }
     result
+}
+
+/// Whether `main` opens the selection machinery before handing off to the runtime.
+///
+/// Windows and macOS must, because the hotkey manager has to be created on the main
+/// thread and there is no point binding a shortcut nothing can service. Both check a
+/// permission and return at once, so `main` loses nothing by waiting.
+///
+/// Linux must not: registration goes through the portal from the runtime anyway, and
+/// its handshake can stall. The IPC socket has to come up first, since `gramit doctor`
+/// is needed most precisely when that handshake is what failed.
+const SELECTION_OPENED_EARLY: bool = cfg!(any(target_os = "windows", target_os = "macos"));
+
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+fn open_selection_early(runtime: &tokio::runtime::Runtime) -> Option<Selection> {
+    runtime.block_on(open_selection())
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn open_selection_early(_runtime: &tokio::runtime::Runtime) -> Option<Selection> {
+    None
 }
 
 /// Opens the clipboard and the keystroke injector, prompting for permission if the
