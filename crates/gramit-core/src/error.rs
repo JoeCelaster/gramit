@@ -18,7 +18,7 @@ pub struct BackendError {
 
 impl BackendError {
     pub fn new(code: impl Into<String>, message: impl Into<String>, retryable: bool) -> Self {
-        Self { code: code.into(), message: message.into(), retryable: retryable.into() }
+        Self { code: code.into(), message: message.into(), retryable }
     }
 
     /// The backend isn't listening — almost always "you forgot to start it".

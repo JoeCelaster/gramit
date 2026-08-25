@@ -160,9 +160,11 @@ mod tests {
 
     /// Points the client at a port nothing listens on, so backend calls fail fast.
     fn state_with_dead_backend(max_chars: usize) -> Arc<DaemonState> {
-        let mut config = Config::default();
-        config.backend_url = "http://127.0.0.1:1".to_string();
-        config.max_chars = max_chars;
+        let config = Config {
+            backend_url: "http://127.0.0.1:1".to_string(),
+            max_chars,
+            ..Config::default()
+        };
         let client =
             BackendClient::new(config.backend_url_trimmed(), Duration::from_millis(500)).unwrap();
         Arc::new(DaemonState::new(config, client))

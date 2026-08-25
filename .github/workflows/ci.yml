@@ -1,0 +1,94 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust:
+    name: rust (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-14, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      # No `cargo fmt --check` gate: this codebase is hand-formatted a little wider
+      # than rustfmt's defaults, and no rustfmt.toml reproduces it. Adding the gate
+      # would mean a 140-hunk reformat across 34 files for no behavioural gain.
+      - name: clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      # crates/gramit-input/tests/clipboard_live.rs needs a real desktop session and
+      # is #[ignore]d for exactly that reason. Never pass --ignored here.
+      - name: test
+        run: cargo test --workspace --locked
+
+  backend:
+    name: backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  install-sh:
+    name: install.sh
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sh -n install.sh
+      - run: shellcheck --shell=sh install.sh
+
+  install-ps1:
+    name: install.ps1
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: parse
+        shell: pwsh
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            "$PWD/install.ps1", [ref]$null, [ref]$errors) | Out-Null
+          if ($errors) { $errors; exit 1 }
+          'parses cleanly'
+
+      - name: analyze
+        shell: pwsh
+        run: |
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser -SkipPublisherCheck
+          # Errors only: the analyzer's warnings are largely style advice that does not
+          # apply to a script whose whole job is printing to the console.
+          $found = Invoke-ScriptAnalyzer -Path install.ps1 -Severity Error
+          if ($found) { $found | Format-Table -AutoSize; exit 1 }
+          'no analyzer errors'

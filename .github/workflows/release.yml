@@ -1,0 +1,241 @@
+# Builds gramit for every supported platform and publishes a GitHub Release that
+# install.sh and install.ps1 can download from.
+#
+#   git tag v0.1.0 && git push origin v0.1.0
+#
+# Asset names deliberately carry no version, so the installers can use GitHub's
+# /releases/latest/download/ redirect without spending an API call on tag lookup.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  verify:
+    name: verify tag
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # A tag that disagrees with the manifest ships binaries whose `--version` lies.
+      - name: tag matches Cargo.toml
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          manifest=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          if [ "$tag" != "$manifest" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match Cargo.toml version $manifest"
+            exit 1
+          fi
+          echo "building $GITHUB_REF_NAME"
+
+      # crates/gramit-core/build.rs bakes this address into every binary, so it is
+      # worth having in the log of the run that produced them.
+      - name: report the backend being baked in
+        run: grep -A1 '^\[backend\]' deploy.toml
+
+  build:
+    name: ${{ matrix.name }}
+    needs: verify
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: x86_64-pc-windows-msvc
+            os: windows-latest
+            targets: x86_64-pc-windows-msvc
+          # One universal binary rather than two downloads: gramit is small enough
+          # that the extra slice costs less than making users pick an architecture.
+          - name: universal-apple-darwin
+            os: macos-14
+            targets: aarch64-apple-darwin,x86_64-apple-darwin
+          # 22.04 rather than latest: the glibc it links against is the floor for
+          # every distro this binary has to run on.
+          - name: x86_64-unknown-linux-gnu
+            os: ubuntu-22.04
+            targets: x86_64-unknown-linux-gnu
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.targets }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.name }}
+
+      - name: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          IFS=',' read -ra targets <<< "${{ matrix.targets }}"
+          for t in "${targets[@]}"; do
+            cargo build --release --locked --bin gramit --bin gramitd --target "$t"
+          done
+
+      - name: stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="dist/gramit-${{ matrix.name }}"
+          mkdir -p "$stage"
+
+          if [ "${{ matrix.name }}" = "universal-apple-darwin" ]; then
+            for b in gramit gramitd; do
+              lipo -create -output "$stage/$b" \
+                "target/aarch64-apple-darwin/release/$b" \
+                "target/x86_64-apple-darwin/release/$b"
+              # Apple Silicon refuses to exec an unsigned binary, and lipo drops the
+              # ad-hoc signature the linker applied. Re-sign ad-hoc. A Developer ID
+              # identity replaces the "-" here once there is a certificate to use.
+              codesign --force --sign - "$stage/$b"
+              lipo -info "$stage/$b"
+            done
+          else
+            IFS=',' read -ra targets <<< "${{ matrix.targets }}"
+            t="${targets[0]}"
+            for b in gramit gramitd; do
+              if [ -f "target/$t/release/$b.exe" ]; then
+                cp "target/$t/release/$b.exe" "$stage/"
+              else
+                cp "target/$t/release/$b" "$stage/"
+              fi
+            done
+          fi
+
+          cp README.md LICENSE "$stage/"
+          if [ "${{ matrix.name }}" = "x86_64-unknown-linux-gnu" ]; then
+            cp packaging/dev.gramit.Gramit.desktop "$stage/"
+          fi
+          ls -la "$stage"
+
+      - name: archive (tar.gz)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          name="gramit-${{ matrix.name }}"
+          tar -czf "$name.tar.gz" "$name"
+          shasum -a 256 "$name.tar.gz" > "$name.tar.gz.sha256"
+          # install.sh reads the binaries out of a single top-level directory.
+          tar -tzf "$name.tar.gz"
+          tar -tzf "$name.tar.gz" | grep -qx "$name/gramit" \
+            || { echo "::error::unexpected archive layout"; exit 1; }
+          cat "$name.tar.gz.sha256"
+
+      - name: archive (zip)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $name = 'gramit-${{ matrix.name }}'
+          Compress-Archive -Path "dist/$name" -DestinationPath "dist/$name.zip" -Force
+
+          # install.ps1 reads the binaries from "$name\gramit.exe" inside the zip.
+          # Whether Compress-Archive keeps the folder as a top-level entry has been
+          # inconsistent across PowerShell versions, so assert it rather than trust it.
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [IO.Compression.ZipFile]::OpenRead((Resolve-Path "dist/$name.zip"))
+          $entries = @($zip.Entries.FullName)
+          $zip.Dispose()
+          $entries
+          if ($entries -notcontains "$name/gramit.exe") {
+            throw "unexpected archive layout: $($entries -join ', ')"
+          }
+
+          $hash = (Get-FileHash "dist/$name.zip" -Algorithm SHA256).Hash.ToLower()
+          "$hash  $name.zip" | Set-Content -Path "dist/$name.zip.sha256" -Encoding ascii
+          Get-Content "dist/$name.zip.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/*.sha256
+          if-no-files-found: error
+
+  publish:
+    name: publish release
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: collect assets
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          mv artifacts/*.tar.gz artifacts/*.zip dist/
+          # The Windows job writes CRLF; strip it so every consumer sees one format.
+          cat artifacts/*.sha256 | sed 's/\r$//' | sort -k2 > dist/SHA256SUMS
+          cp install.sh install.ps1 dist/
+          cat dist/SHA256SUMS
+          ls -la dist
+
+      - name: release notes
+        run: |
+          cat > notes.md <<'EOF'
+          ## Install
+
+          **Windows**
+          ```powershell
+          irm https://raw.githubusercontent.com/JoeCelaster/gramit/main/install.ps1 | iex
+          ```
+
+          **macOS and Linux**
+          ```bash
+          curl -fsSL https://raw.githubusercontent.com/JoeCelaster/gramit/main/install.sh | sh
+          ```
+
+          Then `gramit start`, and:
+
+          - **Linux (GNOME):** `gramit doctor --fix` to bind `Ctrl+Alt+F`.
+          - **macOS:** grant Accessibility in System Settings → Privacy & Security.
+            These builds are not Developer ID signed, so the grant has to be renewed
+            after each upgrade.
+          - **Windows:** nothing further.
+
+          Every archive contains both `gramit` and `gramitd`; they must stay in the
+          same directory. Verify a download against `SHA256SUMS`.
+          EOF
+          cat notes.md
+
+      - name: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # A tag like v0.2.0-rc1 is a pre-release; a plain v0.2.0 is not.
+          prerelease=""
+          case "$GITHUB_REF_NAME" in
+            *-*) prerelease="--prerelease" ;;
+          esac
+
+          # shellcheck disable=SC2086
+          gh release create "$GITHUB_REF_NAME" \
+            --verify-tag \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file notes.md \
+            --generate-notes \
+            $prerelease \
+            dist/gramit-*.tar.gz \
+            dist/gramit-*.zip \
+            dist/SHA256SUMS \
+            dist/install.sh \
+            dist/install.ps1

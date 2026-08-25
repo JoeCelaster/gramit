@@ -73,8 +73,8 @@ mod tests {
     use std::time::Duration;
 
     fn base_state(notifier: RecordingNotifier) -> DaemonState {
-        let mut config = Config::default();
-        config.backend_url = "http://127.0.0.1:1".to_string();
+        let config =
+            Config { backend_url: "http://127.0.0.1:1".to_string(), ..Config::default() };
         let client =
             BackendClient::new(config.backend_url_trimmed(), Duration::from_millis(200)).unwrap();
         DaemonState::new(config, client).with_notifier(Box::new(notifier))

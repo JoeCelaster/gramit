@@ -227,7 +227,6 @@ fn check_hotkey(
     #[cfg(target_os = "linux")]
     {
         check_gnome_keybinding(findings, &hotkey, apply_fixes);
-        return;
     }
 
     #[cfg(not(target_os = "linux"))]

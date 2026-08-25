@@ -64,8 +64,6 @@ fn print_tail(contents: &str, lines: usize) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn tail_keeps_only_the_last_lines() {
         // Exercised through the same slicing print_tail uses.

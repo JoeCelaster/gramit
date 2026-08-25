@@ -227,8 +227,7 @@ mod tests {
 
     #[test]
     fn config_selects_the_notifier() {
-        let mut config = Config::default();
-        config.notifications = false;
+        let mut config = Config { notifications: false, ..Config::default() };
         // Only the type differs; behaviour is covered by the recording notifier tests.
         let _silent = for_config(&config);
         config.notifications = true;

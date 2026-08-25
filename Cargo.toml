@@ -22,3 +22,12 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 # actually matters when debugging the daemon.
 [profile.dev]
 debug = "line-tables-only"
+
+# Release binaries are downloaded, not built, by nearly everyone who runs gramit, so
+# they are tuned for size and speed rather than build time. `panic` is deliberately
+# left at "unwind": the daemon runs work on Tokio tasks, and aborting the process on a
+# panic in one of them would take the hotkey down with it.
+[profile.release]
+strip = "symbols"
+lto = "thin"
+codegen-units = 1
