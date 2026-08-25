@@ -151,12 +151,13 @@ Two different things get called "keys". Both are covered.
 - **Exclusive.** A second registration of the same combination fails; a system shortcut
   wins. `register()` already turns that into "another application may already own it" —
   on macOS `doctor` should additionally suggest a fallback combination.
-- **Default hotkey.** `Ctrl+Alt+F` is legal on macOS (Alt = Option) but unidiomatic and
-  collides with Option-key dead-key composition in some layouts. macOS default becomes
-  **`Ctrl+Cmd+F`** — no system owner, no dead keys, reachable one-handed. Implemented as
-  a per-platform default in `config.rs`, not a hardcoded string in three places;
-  `hotkey_spec.rs` already accepts `Cmd`/`Command`/`Meta` and maps them to
-  `Modifiers::META`.
+- **Default hotkey.** Stays `Ctrl+Alt+F` on every platform. An earlier draft of this
+  plan proposed `Ctrl+Cmd+F` on the grounds that it has "no system owner" — that is
+  wrong: `⌃⌘F` is macOS's standard **Enter/Exit Full Screen**, present in the View menu
+  of nearly every app, so it is a far worse choice than what it replaced. `Ctrl+Alt+F`
+  registers cleanly on macOS (Alt = Option) and users already know it; only its
+  *spelling* needed fixing, which `hotkey_spec::display()` now handles by rendering it
+  as `Ctrl+Option+F` wherever a Mac user reads it.
 
 #### 3.2.2 Keystrokes — injecting copy and paste
 

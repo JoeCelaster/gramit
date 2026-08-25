@@ -282,15 +282,21 @@ prefer testing a stable `target/release/gramitd` over rebuilding repeatedly.
 1. `gramit status` — does **typing** say `CGEvent via enigo (macOS)`?
 2. `gramit status` — does **hotkey** say `Ctrl+Alt+F` as registered (not "not bound by the daemon")? Unlike Linux, the daemon registers the hotkey itself here.
 3. `gramit fix "he go"` — proves the CLI → daemon → backend chain, no permissions involved.
-4. Then the [real test](#4-the-test-that-actually-matters).
+4. **Did Carbon actually deliver it?** Select text, press the hotkey, then `gramit logs`.
+   `hotkey_loop` logs `hotkey pressed` for every delivered press. That one line splits the
+   two failures that look identical from the outside: no line means the event never
+   arrived (the main thread is not dispatching); a line followed by `nothing was
+   selected` means it arrived and the fix itself failed. Registration succeeding tells
+   you nothing here — it reserves the chord with the WindowServer, no more.
+5. Then the [real test](#4-the-test-that-actually-matters).
 
 ### Failure modes specific to macOS
 
 | Symptom | Likely cause |
 |---|---|
-| Hotkey registers but **never fires** | The main-thread run loop isn't pumping. Carbon delivers hotkeys only on the main thread; `main` calls `run_loop::pump_until` for exactly this. |
+| Hotkey registers but **never fires** | The main thread is not *dispatching*. Carbon only queues the press; `run_loop::pump_until` has to dequeue it (`ReceiveNextEvent`) and hand it to the dispatcher target. Registration succeeding proves nothing — it reserves the chord with the WindowServer and says nothing about delivery. A CFRunLoop-only pump looks healthy in `doctor` and delivers not one press; that was the bug through 0.1.1. |
 | Text is captured but nothing pastes | Accessibility not granted, or granted to a stale binary |
-| Copy/paste does nothing at all | gramit sends **Cmd**+C/V on macOS; if it is sending Ctrl, that's a bug in the modifier selection |
+| Copy/paste does nothing at all | gramit sends **Cmd**+C/V on macOS; if it is sending Ctrl, that's a bug in the modifier selection. Also check the modifiers you were holding: the hotkey fires on press, so an unreleased `Ctrl+Option` turns the injected `Cmd+C` into `Ctrl+Option+Cmd+C`, which copies nothing. `send_chord` releases them first for exactly this reason. |
 | Daemon exits immediately | Check `gramit logs` |
 
 ---

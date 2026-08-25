@@ -78,10 +78,57 @@ impl NativeInjector {
     }
 }
 
+/// Modifiers the user could still be leaning on when a fix starts — both sides of the
+/// keyboard, since `Key::Alt` and `Key::Meta` name only the left-hand keycodes.
+///
+/// Windows is deliberately left alone. `RegisterHotKey` has the same fire-on-press
+/// hazard, but that platform has never been run on real hardware, and the fix loop's
+/// retry window already covers it; changing its injected event sequence belongs in a
+/// change someone can actually test.
+#[cfg(target_os = "macos")]
+const HELD_MODIFIERS: &[Key] = &[
+    Key::Shift,
+    Key::RShift,
+    Key::Control,
+    Key::RControl,
+    Key::Alt,
+    Key::ROption,
+    Key::Meta,
+    Key::RCommand,
+];
+
+#[cfg(not(target_os = "macos"))]
+const HELD_MODIFIERS: &[Key] = &[];
+
+/// Lets go of whatever the user is still holding, before we type anything.
+///
+/// The hotkey that triggered this fix is very likely still down: Carbon fires a hot key
+/// on key *press*, and a `Ctrl+Option+F` chord is comfortably held for several hundred
+/// milliseconds. Without this the `Cmd+C` we inject arrives as `Ctrl+Option+Cmd+C`,
+/// which copies nothing and looks exactly like an empty selection. Linux does the same
+/// thing for the same reason — see `release_modifiers` in `linux/inject.rs`.
+///
+/// This does not replace the retry window in `fixloop::capture`: that also covers a
+/// user still leaning on the key, a slow clipboard, and an app that ignores the first
+/// synthetic event. This just means the first attempt usually lands.
+///
+/// Releasing a key that was never held is a no-op, so this is best-effort: a failure
+/// here is not worth abandoning the fix over, and the chord that follows is what
+/// actually has to land.
+fn release_held_modifiers(enigo: &mut Enigo) {
+    for key in HELD_MODIFIERS {
+        if let Err(err) = enigo.key(*key, Direction::Release) {
+            debug!(%err, ?key, "could not release a modifier before typing");
+        }
+    }
+}
+
 fn send_chord(enigo: &mut Enigo, key: char) -> Result<(), InputError> {
     let press = |enigo: &mut Enigo, k: Key, d: Direction| {
         enigo.key(k, d).map_err(|err| InputError::Injection(err.to_string()))
     };
+
+    release_held_modifiers(enigo);
 
     press(enigo, MODIFIER, Direction::Press)?;
     let tapped = press(enigo, Key::Unicode(key), Direction::Click);
