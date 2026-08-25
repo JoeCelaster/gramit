@@ -40,9 +40,13 @@ asked for. macOS gets one universal binary that runs on Apple Silicon and Intel.
 Then, in a new terminal:
 
 ```bash
+gramit setup                   # asks which backend to send text to
 gramit start
 gramit doctor --fix            # binds the hotkey and reports anything broken
 ```
+
+`gramit start` asks the setup question itself the first time, so running `setup`
+separately is optional.
 
 On macOS, grant Accessibility in System Settings → Privacy & Security before the first
 fix. These builds are not Developer ID signed, so macOS ties that grant to the exact
@@ -74,22 +78,49 @@ Both leave your config and logs in place.
 cargo build --release          # produces target/release/gramit and gramitd
 ```
 
-Corrections go to the hosted backend named by `backend.url` in the workspace
-`deploy.toml`, so there is nothing else to install and no API key on your machine.
-That file is the single source for the address: `gramit-core` reads it at build time,
-and no URL is hardcoded in the Rust sources. To run the backend yourself instead:
+`gramit doctor` is the command to reach for whenever something isn't working — every
+failed check prints what to do about it.
+
+## The backend
+
+gramit does not correct text by itself. It sends the text to a small HTTP service —
+the backend — which calls a language model and sends the correction back.
+
+**No backend address is built into gramit.** There is no default, nothing is compiled
+in, and the binaries on the releases page point at nobody. You say where to send text
+and it is written to your own config file:
+
+```bash
+gramit setup                        # asks, checks the address answers, saves it
+gramit setup https://your-backend    # or say it outright
+```
+
+This is deliberate. A public repository with an address baked in would aim every
+install on earth at whoever built the binaries and spend their model credits, and it
+would mean everyone's text quietly flowed through one machine. Neither is something a
+user should have to opt out of.
+
+### Running your own
+
+The backend lives in `backend/` and is a small Node service. It is the only component
+that holds a model API key — the key never reaches your machine.
 
 ```bash
 cd backend
 npm install
 cp .env.example .env           # fill in your Azure OpenAI details
 npm run build && npm start     # listens on 127.0.0.1:8787
-gramit config set backend_url http://127.0.0.1:8787
+
+gramit setup http://127.0.0.1:8787
 gramit restart
 ```
 
-`gramit doctor` is the command to reach for whenever something isn't working — every
-failed check prints what to do about it.
+It deploys to anything that runs a Node server; `backend/vercel.json` is set up for
+Vercel. Point `gramit setup` at the deployed URL afterwards.
+
+For one-off use against a different backend without changing your saved config, set
+`GRAMIT_BACKEND_URL` in the environment — it is read at run time and wins for that
+process only.
 
 ## Usage
 
@@ -103,7 +134,8 @@ gramit fix --selection            # capture the selection, correct it, paste it 
 `gramit fix --selection` is what the hotkey runs.
 
 ```bash
-gramit start [--foreground]   gramit stop   gramit restart   gramit status
+gramit setup [url]            gramit start [--foreground]   gramit stop
+gramit restart                gramit status
 gramit config get [key]       gramit config set <key> <value>   gramit config path
 gramit logs [-f] [-n N]       gramit doctor [--fix]
 ```
@@ -116,7 +148,7 @@ gramit logs [-f] [-n N]       gramit doctor [--fix]
 | Setting | Default | Meaning |
 |---|---|---|
 | `hotkey` | `Ctrl+Alt+F` | The shortcut that fixes the selection |
-| `backend_url` | `backend.url` from `deploy.toml` | Backend that corrects the text |
+| `backend_url` | *(none — you set it)* | Backend that corrects the text |
 | `mode` | `grammar` | Correction style |
 | `notifications` | `true` | Show a toast for each fix |
 | `max_chars` | `8000` | Refuse selections longer than this |
@@ -188,8 +220,8 @@ as a GitHub Release with a `SHA256SUMS` file. The installers read that release, 
 nothing else has to be updated when a version ships. A tag with a suffix
 (`v0.2.0-rc1`) is published as a pre-release.
 
-The backend address baked into those binaries comes from `deploy.toml` as it stands at
-the tag, so check it before tagging.
+Released binaries contain no backend address — each user supplies their own with
+`gramit setup`, so there is nothing deployment-specific to check before tagging.
 
 `FLOW.md` traces exactly what happens between pressing the hotkey and the text
 changing — the best place to start when something misbehaves. `TESTING.md` covers

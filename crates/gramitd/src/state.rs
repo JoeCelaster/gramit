@@ -15,7 +15,10 @@ pub struct Metrics {
 
 pub struct DaemonState {
     pub config: Config,
-    pub client: BackendClient,
+    /// `None` until the user has run `gramit setup`. The daemon still starts and
+    /// serves IPC without one, so `gramit status` and `gramit doctor` can say what
+    /// is missing instead of the user meeting a daemon that refuses to run.
+    pub client: Option<BackendClient>,
     /// None when the clipboard or injector could not be opened — the daemon still
     /// serves IPC so `gramit doctor` can explain why.
     pub selection: Option<Selection>,
@@ -32,7 +35,7 @@ pub struct DaemonState {
 }
 
 impl DaemonState {
-    pub fn new(config: Config, client: BackendClient) -> Self {
+    pub fn new(config: Config, client: Option<BackendClient>) -> Self {
         Self {
             config,
             client,
@@ -93,9 +96,9 @@ mod tests {
     use std::time::Duration;
 
     fn state() -> DaemonState {
-        let config = Config::default();
-        let client = BackendClient::new(config.backend_url_trimmed(), Duration::from_secs(1)).unwrap();
-        DaemonState::new(config, client)
+        let config = Config { backend_url: "http://127.0.0.1:1".to_string(), ..Config::default() };
+        let client = BackendClient::new("http://127.0.0.1:1", Duration::from_secs(1)).unwrap();
+        DaemonState::new(config, Some(client))
     }
 
     #[test]

@@ -88,7 +88,8 @@ pub struct StatusReport {
     pub selection_ready: bool,
     /// The injection mechanism in use, e.g. "RemoteDesktop portal (Wayland)".
     pub injector: Option<String>,
-    pub backend_url: String,
+    /// `None` when no backend has been configured yet.
+    pub backend_url: Option<String>,
     pub backend_reachable: bool,
     /// Whether the backend reports a usable Azure configuration.
     pub backend_has_key: Option<bool>,
@@ -170,7 +171,7 @@ mod tests {
             hotkey_detail: None,
             selection_ready: true,
             injector: Some("fake".into()),
-            backend_url: "http://127.0.0.1:8787".into(),
+            backend_url: Some("http://127.0.0.1:8787".into()),
             backend_reachable: true,
             backend_has_key: Some(false),
             backend_detail: Some("missing AZURE_OPENAI_API_KEY".into()),

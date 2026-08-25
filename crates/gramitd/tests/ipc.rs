@@ -33,6 +33,12 @@ fn socket_name(path: &std::path::Path) -> Name<'static> {
 /// Starts a daemon in an isolated temp dir, pointed at a backend port nothing listens
 /// on, so backend calls fail fast and deterministically.
 async fn start_daemon() -> DaemonGuard {
+    start_daemon_with("backend_url = \"http://127.0.0.1:1\"\n").await
+}
+
+/// The same daemon with `extra` appended to its config, so a test can vary one
+/// setting — notably by leaving `backend_url` out entirely.
+async fn start_daemon_with(extra: &str) -> DaemonGuard {
     let dir = tempfile::tempdir().expect("temp dir");
     let socket = dir.path().join("gramit.sock");
     let config_path = dir.path().join("config.toml");
@@ -41,11 +47,11 @@ async fn start_daemon() -> DaemonGuard {
     writeln!(
         config,
         "hotkey = \"Ctrl+Alt+F\"\n\
-         backend_url = \"http://127.0.0.1:1\"\n\
          mode = \"grammar\"\n\
          notifications = false\n\
          max_chars = 20\n\
-         request_timeout_ms = 500"
+         request_timeout_ms = 500\n\
+         {extra}"
     )
     .expect("write config");
     drop(config);
@@ -53,6 +59,9 @@ async fn start_daemon() -> DaemonGuard {
     let child = Command::new(env!("CARGO_BIN_EXE_gramitd"))
         .env("GRAMIT_SOCKET", &socket)
         .env("GRAMIT_CONFIG", &config_path)
+        // The daemon honours this at run time, so a developer who has it exported
+        // would otherwise silently change what these tests are asserting about.
+        .env_remove("GRAMIT_BACKEND_URL")
         .env("GRAMIT_LOG", dir.path().join("gramitd.log"))
         .spawn()
         .expect("spawn gramitd");
@@ -126,6 +135,34 @@ async fn one_connection_carries_several_requests() {
     assert!(matches!(responses[2], Response::Status(_)));
 }
 
+/// A brand-new install: no backend has been named yet. The daemon must still come
+/// up and serve IPC, and it must refuse to correct anything.
+#[tokio::test]
+async fn an_unconfigured_daemon_still_starts_and_refuses_to_fix() {
+    let daemon = start_daemon_with("").await;
+    let responses = round_trip(
+        &daemon.socket,
+        &[Request::Status, Request::Fix { text: "he go".into(), mode: Default::default() }],
+    )
+    .await;
+
+    match &responses[0] {
+        Response::Status(report) => {
+            assert_eq!(report.backend_url, None, "nothing may be assumed about the backend");
+            assert!(!report.backend_reachable);
+        }
+        other => panic!("expected status, got {other:?}"),
+    }
+
+    match &responses[1] {
+        Response::Error { code, message, .. } => {
+            assert_eq!(code, "NO_BACKEND");
+            assert!(message.contains("gramit setup"), "the error must say how to fix it: {message}");
+        }
+        other => panic!("expected an error, got {other:?}"),
+    }
+}
+
 #[tokio::test]
 async fn status_reports_config_and_an_unreachable_backend() {
     let daemon = start_daemon().await;
@@ -134,7 +171,7 @@ async fn status_reports_config_and_an_unreachable_backend() {
     match &responses[0] {
         Response::Status(report) => {
             assert_eq!(report.hotkey, "Ctrl+Alt+F");
-            assert_eq!(report.backend_url, "http://127.0.0.1:1");
+            assert_eq!(report.backend_url.as_deref(), Some("http://127.0.0.1:1"));
             assert!(!report.backend_reachable);
             assert!(!report.notifications);
             assert_eq!(report.fixes_total, 0);

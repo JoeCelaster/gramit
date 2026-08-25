@@ -134,9 +134,11 @@ you highlighting text:
 `crates/gramit-core/src/client.rs` → `POST <backend_url>/v1/fix`
 with `{"text": "...", "mode": "grammar"}`.
 
-`backend_url` comes from `config.toml`, defaulting to `backend.url` in the workspace
-`deploy.toml` — `crates/gramit-core/build.rs` bakes that in as
-`config::DEFAULT_BACKEND_URL`, the only place the address appears in the Rust code.
+`backend_url` comes from the user's `config.toml`, put there by `gramit setup`. There
+is no default and nothing is compiled in: `Config::backend_url()` returns `None` until
+the user names an address, and every path that needs one then fails with `NO_BACKEND`
+rather than reaching a stranger's machine. `GRAMIT_BACKEND_URL` overrides the saved
+value at run time for a single process.
 
 In the backend (`backend/src/`):
 

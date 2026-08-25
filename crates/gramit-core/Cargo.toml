@@ -17,8 +17,3 @@ thiserror.workspace = true
 tokio = { workspace = true, features = ["rt", "time"] }
 toml = "1.0.7"
 tracing.workspace = true
-
-[build-dependencies]
-# Reads the backend address out of the workspace deploy.toml. Same crate the runtime
-# config uses, so it is already in the lockfile.
-toml = "1.0.7"

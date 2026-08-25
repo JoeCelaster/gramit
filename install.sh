@@ -205,6 +205,7 @@ next_steps() {
         *":$INSTALL_DIR:"*) ;;
         *) info "open a new terminal (or source your shell rc) so PATH picks up $INSTALL_DIR" ;;
     esac
+    info "gramit setup             # tell gramit which backend to send text to"
     info "gramit start"
 
     if [ "$OS" = "Darwin" ]; then
@@ -219,6 +220,9 @@ next_steps() {
 
     say ""
     say "Then select text anywhere and press Ctrl+Alt+F."
+    say ""
+    say "gramit ships with no backend address: you choose where your text is sent,"
+    say "and it is saved only in your own config. See the README if you need to run one."
 }
 
 uninstall() {

@@ -42,7 +42,11 @@ async fn fix(state: &Arc<DaemonState>, text: String, mode: Mode) -> Response {
 
     debug!(chars = length, %mode, "fixing text");
 
-    match state.client.fix(&text, mode).await {
+    let Some(client) = state.client.as_ref() else {
+        return BackendError::not_configured().into();
+    };
+
+    match client.fix(&text, mode).await {
         Ok(outcome) => {
             state.record_fix();
             info!(
@@ -90,7 +94,11 @@ async fn fix_clipboard(state: &Arc<DaemonState>) -> Response {
         return BackendError::too_long(length, state.config.max_chars).into();
     }
 
-    let outcome = match state.client.fix(&text, state.config.mode).await {
+    let Some(client) = state.client.as_ref() else {
+        return BackendError::not_configured().into();
+    };
+
+    let outcome = match client.fix(&text, state.config.mode).await {
         Ok(outcome) => outcome,
         Err(err) => {
             warn!(code = %err.code, "clipboard fix failed");
@@ -121,14 +129,19 @@ async fn fix_clipboard(state: &Arc<DaemonState>) -> Response {
 async fn status(state: &Arc<DaemonState>) -> Response {
     let metrics = state.metrics();
 
-    let (backend_reachable, backend_has_key, backend_detail) = match state.client.health().await {
-        Ok(health) if health.has_key => (true, Some(true), health.model),
-        Ok(health) => (
-            true,
-            Some(false),
-            Some(format!("backend has no API key; missing: {}", health.missing.join(", "))),
-        ),
-        Err(err) => (false, None, Some(err.message)),
+    let (backend_reachable, backend_has_key, backend_detail) = match state.client.as_ref() {
+        // No detail: `backend_url: None` already tells the CLI everything, and it
+        // renders its own one-line remedy rather than repeating this.
+        None => (false, None, None),
+        Some(client) => match client.health().await {
+            Ok(health) if health.has_key => (true, Some(true), health.model),
+            Ok(health) => (
+                true,
+                Some(false),
+                Some(format!("backend has no API key; missing: {}", health.missing.join(", "))),
+            ),
+            Err(err) => (false, None, Some(err.message)),
+        },
     };
 
     Response::Status(Box::new(StatusReport {
@@ -140,7 +153,7 @@ async fn status(state: &Arc<DaemonState>) -> Response {
         hotkey_detail: state.hotkey_detail.clone(),
         selection_ready: state.selection.is_some(),
         injector: state.selection.as_ref().map(|s| s.describe()),
-        backend_url: state.config.backend_url_trimmed().to_string(),
+        backend_url: state.config.backend_url(),
         backend_reachable,
         backend_has_key,
         backend_detail,
@@ -165,9 +178,8 @@ mod tests {
             max_chars,
             ..Config::default()
         };
-        let client =
-            BackendClient::new(config.backend_url_trimmed(), Duration::from_millis(500)).unwrap();
-        Arc::new(DaemonState::new(config, client))
+        let client = BackendClient::new("http://127.0.0.1:1", Duration::from_millis(500)).unwrap();
+        Arc::new(DaemonState::new(config, Some(client)))
     }
 
     #[tokio::test]

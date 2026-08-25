@@ -121,13 +121,22 @@ async fn run(
 
     let endpoint = paths::endpoint();
     let listener = endpoint::bind(&endpoint).await?;
-    info!(%endpoint, backend = config.backend_url_trimmed(), "listening");
-
-    let client = BackendClient::new(
-        config.backend_url_trimmed(),
-        Duration::from_millis(config.request_timeout_ms),
-    )
-    .map_err(|err| anyhow::anyhow!("could not build the backend client: {err}"))?;
+    // A daemon with no backend is still worth starting: it answers IPC, so `gramit
+    // status` and `gramit doctor` can report the one thing that is missing.
+    let client = match config.backend_url() {
+        Some(url) => {
+            info!(%endpoint, backend = %url, "listening");
+            Some(
+                BackendClient::new(&url, Duration::from_millis(config.request_timeout_ms))
+                    .map_err(|err| anyhow::anyhow!("could not build the backend client: {err}"))?,
+            )
+        }
+        None => {
+            info!(%endpoint, "listening");
+            warn!("no backend configured; corrections will be refused until `gramit setup` runs");
+            None
+        }
+    };
 
     // The selection machinery and the hotkey are both optional: without them the
     // daemon still answers IPC, so `gramit fix` works and `gramit doctor` can say

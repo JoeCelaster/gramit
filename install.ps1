@@ -223,10 +223,14 @@ function Invoke-Install {
     Write-Note 'gramit is installed. Next:'
     Write-Note ''
     Write-Step 'open a new terminal so PATH applies everywhere'
+    Write-Step 'gramit setup             # tell gramit which backend to send text to'
     Write-Step 'gramit start'
     Write-Step 'gramit doctor'
     Write-Note ''
     Write-Note 'Then select text anywhere and press Ctrl+Alt+F.'
+    Write-Note ''
+    Write-Note 'gramit ships with no backend address: you choose where your text is sent,'
+    Write-Note 'and it is saved only in your own config. See the README if you need to run one.'
 }
 
 if ($Uninstall -or $env:GRAMIT_UNINSTALL) {

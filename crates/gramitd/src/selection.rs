@@ -29,6 +29,11 @@ async fn run_inner(state: &Arc<DaemonState>) -> FixOutcome {
         };
     };
 
+    let Some(client) = state.client.as_ref() else {
+        let err = gramit_core::BackendError::not_configured();
+        return FixOutcome::Failed { code: err.code, message: err.message, retryable: false };
+    };  
+
     // Two fixes at once would race over one clipboard and paste into whichever window
     // happens to be focused. Refusing is better than corrupting the user's text.
     let Ok(_guard) = state.fix_gate.try_lock() else {
@@ -41,7 +46,7 @@ async fn run_inner(state: &Arc<DaemonState>) -> FixOutcome {
     };
 
     let settings = Settings::from(&state.config);
-    let outcome = fixloop::run(selection, &state.client, &settings).await;
+    let outcome = fixloop::run(selection, client, &settings).await;
 
     match &outcome {
         FixOutcome::Replaced { changes, .. } => {
@@ -75,9 +80,8 @@ mod tests {
     fn base_state(notifier: RecordingNotifier) -> DaemonState {
         let config =
             Config { backend_url: "http://127.0.0.1:1".to_string(), ..Config::default() };
-        let client =
-            BackendClient::new(config.backend_url_trimmed(), Duration::from_millis(200)).unwrap();
-        DaemonState::new(config, client).with_notifier(Box::new(notifier))
+        let client = BackendClient::new("http://127.0.0.1:1", Duration::from_millis(200)).unwrap();
+        DaemonState::new(config, Some(client)).with_notifier(Box::new(notifier))
     }
 
     fn state_without_selection(notifier: RecordingNotifier) -> Arc<DaemonState> {

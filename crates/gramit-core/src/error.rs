@@ -49,6 +49,13 @@ impl BackendError {
     pub fn empty_text() -> Self {
         Self::new("EMPTY_TEXT", "No text to correct.", false)
     }
+
+    /// No address has been configured yet. Deliberately distinct from `unreachable`:
+    /// there is nothing to reach, and the remedy is a one-off setup step rather than
+    /// waiting and retrying.
+    pub fn not_configured() -> Self {
+        Self::new("NO_BACKEND", "No backend is configured. Set one with: gramit setup", false)
+    }
 }
 
 #[derive(Debug, Error)]

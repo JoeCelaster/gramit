@@ -35,11 +35,6 @@ jobs:
           fi
           echo "building $GITHUB_REF_NAME"
 
-      # crates/gramit-core/build.rs bakes this address into every binary, so it is
-      # worth having in the log of the run that produced them.
-      - name: report the backend being baked in
-        run: grep -A1 '^\[backend\]' deploy.toml
-
   build:
     name: ${{ matrix.name }}
     needs: verify
@@ -209,7 +204,15 @@ jobs:
           curl -fsSL https://raw.githubusercontent.com/JoeCelaster/gramit/main/install.sh | sh
           ```
 
-          Then `gramit start`, and:
+          Then:
+
+          ```
+          gramit setup      # name the backend your text is sent to
+          gramit start
+          ```
+
+          gramit contains no backend address — you supply your own, and it is saved
+          only in your config. Per-OS notes:
 
           - **Linux (GNOME):** `gramit doctor --fix` to bind `Ctrl+Alt+F`.
           - **macOS:** grant Accessibility in System Settings → Privacy & Security.

@@ -153,13 +153,13 @@ pub fn print_report(report: &StatusReport) {
     };
     println!("  {}  {selection}", ui::bold("typing"));
 
-    let backend = if report.backend_reachable {
-        match report.backend_has_key {
-            Some(true) => ui::green(&report.backend_url),
-            _ => ui::yellow(&format!("{} (no API key)", report.backend_url)),
-        }
-    } else {
-        ui::red(&format!("{} (unreachable)", report.backend_url))
+    let backend = match report.backend_url.as_deref() {
+        None => ui::red("not configured — set one with: gramit setup"),
+        Some(url) if report.backend_reachable => match report.backend_has_key {
+            Some(true) => ui::green(url),
+            _ => ui::yellow(&format!("{url} (no API key)")),
+        },
+        Some(url) => ui::red(&format!("{url} (unreachable)")),
     };
     println!("  {}  {backend}", ui::bold("backend"));
 

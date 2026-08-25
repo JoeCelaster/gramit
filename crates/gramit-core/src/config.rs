@@ -5,20 +5,32 @@ use serde::{Deserialize, Serialize};
 use crate::error::ConfigError;
 use crate::paths;
 
-/// The backend every crate talks to, and the only place its address appears in the
-/// Rust sources. The value comes from `backend.url` in the workspace `deploy.toml`,
-/// read at build time by `build.rs` — deployments change it there, not in code.
-pub const DEFAULT_BACKEND_URL: &str = env!("GRAMIT_BACKEND_URL");
-
-/// The backend address a fresh config starts with.
+/// Turns what a person typed into a base URL the HTTP client can use.
 ///
-/// `GRAMIT_BACKEND_URL` is honoured at run time as well as at build time, so a
-/// developer can aim the daemon at a local backend for one run without rebuilding.
-/// An explicit `backend_url` in `config.toml` still wins over both.
-pub fn default_backend_url() -> String {
+/// People type `example.vercel.app`, not `https://example.vercel.app/`, so a bare
+/// host gets `https://` and a trailing slash is dropped. An empty input stays empty,
+/// which is how "no backend configured" is represented.
+pub fn normalize_backend_url(raw: &str) -> String {
+    let trimmed = raw.trim().trim_end_matches('/');
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        trimmed.to_string()
+    } else {
+        format!("https://{trimmed}")
+    }
+}
+
+/// A backend address from `GRAMIT_BACKEND_URL`, or `None`.
+///
+/// Read at run time only — no address is compiled into these binaries. This exists so
+/// a developer can aim one process at a local backend without touching the config
+/// every other process reads.
+pub fn backend_url_from_env() -> Option<String> {
     match std::env::var("GRAMIT_BACKEND_URL") {
-        Ok(url) if !url.trim().is_empty() => url.trim().to_string(),
-        _ => DEFAULT_BACKEND_URL.to_string(),
+        Ok(url) if !url.trim().is_empty() => Some(normalize_backend_url(&url)),
+        _ => None,
     }
 }
 
@@ -83,6 +95,12 @@ impl std::str::FromStr for Mode {
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
     pub hotkey: String,
+    /// Where text is sent to be corrected. Empty until `gramit setup` fills it in.
+    ///
+    /// There is deliberately no default and nothing compiled into the binary: this
+    /// repository is public, so a built-in address would point every install at
+    /// whoever built it and spend that person's model credits. Read it through
+    /// [`Config::backend_url`], which also honours `GRAMIT_BACKEND_URL`.
     pub backend_url: String,
     pub mode: Mode,
     pub notifications: bool,
@@ -115,7 +133,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             hotkey: "Ctrl+Alt+F".to_string(),
-            backend_url: default_backend_url(),
+            backend_url: String::new(),
             mode: Mode::Grammar,
             notifications: true,
             max_chars: 8_000,
@@ -176,8 +194,11 @@ impl Config {
         if self.hotkey.trim().is_empty() {
             return Err(ConfigError::Invalid("hotkey must not be empty".into()));
         }
+        // Empty means "not set up yet". A fresh install is in exactly that state and
+        // has to stay loadable, or `gramit setup` — the thing that fixes it — could
+        // not run. A value that is present still has to be a real absolute URL.
         let url = self.backend_url.trim();
-        if !(url.starts_with("http://") || url.starts_with("https://")) {
+        if !url.is_empty() && !(url.starts_with("http://") || url.starts_with("https://")) {
             return Err(ConfigError::Invalid(format!(
                 "backend_url must start with http:// or https://, got {url:?}"
             )));
@@ -194,8 +215,21 @@ impl Config {
         Ok(())
     }
 
-    pub fn backend_url_trimmed(&self) -> &str {
-        self.backend_url.trim().trim_end_matches('/')
+    /// The backend to talk to, or `None` when the user has not configured one.
+    ///
+    /// The environment wins over the saved file so a single process can be pointed
+    /// elsewhere without changing what every other process uses.
+    pub fn backend_url(&self) -> Option<String> {
+        if let Some(from_env) = backend_url_from_env() {
+            return Some(from_env);
+        }
+        let configured = normalize_backend_url(&self.backend_url);
+        (!configured.is_empty()).then_some(configured)
+    }
+
+    /// Whether there is a backend to talk to at all.
+    pub fn has_backend(&self) -> bool {
+        self.backend_url().is_some()
     }
 }
 
@@ -209,14 +243,34 @@ mod tests {
     }
 
     #[test]
-    fn the_default_backend_comes_from_deploy_toml() {
-        // Guards the rule this crate's build.rs exists to enforce: the address is
-        // configuration, so it arrives from deploy.toml rather than a literal here.
-        assert!(
-            DEFAULT_BACKEND_URL.starts_with("http://") || DEFAULT_BACKEND_URL.starts_with("https://"),
-            "GRAMIT_BACKEND_URL must be an absolute URL, got {DEFAULT_BACKEND_URL:?}"
-        );
-        assert_eq!(Config::default().backend_url, default_backend_url());
+    fn a_fresh_config_has_no_backend() {
+        // The point of the whole design: nothing ships with an address, so a fresh
+        // install cannot send anyone's text anywhere until its owner says where.
+        let config = Config::default();
+        assert_eq!(config.backend_url, "");
+        // Honours GRAMIT_BACKEND_URL, so only assert the no-backend case when the
+        // developer running the tests has not set one.
+        if std::env::var_os("GRAMIT_BACKEND_URL").is_none() {
+            assert_eq!(config.backend_url(), None);
+            assert!(!config.has_backend());
+        }
+    }
+
+    #[test]
+    fn an_unset_backend_still_validates() {
+        // `gramit setup` has to be able to load the config it is about to fix.
+        Config { backend_url: String::new(), ..Config::default() }
+            .validate()
+            .expect("an empty backend_url is 'not set up yet', not an error");
+    }
+
+    #[test]
+    fn normalizes_what_a_user_would_actually_type() {
+        assert_eq!(normalize_backend_url("example.vercel.app"), "https://example.vercel.app");
+        assert_eq!(normalize_backend_url("  example.vercel.app/  "), "https://example.vercel.app");
+        assert_eq!(normalize_backend_url("http://127.0.0.1:8787/"), "http://127.0.0.1:8787");
+        assert_eq!(normalize_backend_url("https://a.b"), "https://a.b");
+        assert_eq!(normalize_backend_url("   "), "");
     }
 
     #[test]
@@ -269,7 +323,9 @@ mod tests {
     fn trims_trailing_slash_from_backend_url() {
         let config =
             Config { backend_url: "http://127.0.0.1:8787/".into(), ..Config::default() };
-        assert_eq!(config.backend_url_trimmed(), "http://127.0.0.1:8787");
+        if std::env::var_os("GRAMIT_BACKEND_URL").is_none() {
+            assert_eq!(config.backend_url().as_deref(), Some("http://127.0.0.1:8787"));
+        }
     }
 
     #[test]

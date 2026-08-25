@@ -10,6 +10,7 @@ mod doctor;
 mod fix;
 mod lifecycle;
 mod logs;
+mod setup;
 mod ui;
 
 use anyhow::Result;
@@ -31,6 +32,14 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Tell gramit which backend to send text to
+    Setup {
+        /// The backend address. Omit it and you will be asked.
+        url: Option<String>,
+        /// Save the address even if it cannot be reached right now
+        #[arg(long)]
+        force: bool,
+    },
     /// Start the daemon
     Start {
         /// Run in this terminal instead of the background
@@ -98,7 +107,13 @@ async fn run() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Command::Start { foreground } => lifecycle::start(foreground).await,
+        Command::Setup { url, force } => setup::run(url, force).await,
+        Command::Start { foreground } => {
+            // The first thing a fresh install does. Asking here means the answer is
+            // saved before the daemon reads the config.
+            setup::ensure_configured().await?;
+            lifecycle::start(foreground).await
+        }
         Command::Stop => lifecycle::stop().await,
         Command::Restart => lifecycle::restart().await,
         Command::Status => lifecycle::status().await,
@@ -139,6 +154,27 @@ enum ConfigCommand {
 mod tests {
     use super::*;
     use clap::CommandFactory;
+
+    #[test]
+    fn setup_takes_an_optional_url() {
+        let cli = Cli::try_parse_from(["gramit", "setup"]).unwrap();
+        match cli.command {
+            Command::Setup { url, force } => {
+                assert_eq!(url, None);
+                assert!(!force);
+            }
+            _ => panic!("expected setup"),
+        }
+
+        let cli = Cli::try_parse_from(["gramit", "setup", "example.app", "--force"]).unwrap();
+        match cli.command {
+            Command::Setup { url, force } => {
+                assert_eq!(url.as_deref(), Some("example.app"));
+                assert!(force);
+            }
+            _ => panic!("expected setup"),
+        }
+    }
 
     #[test]
     fn the_command_tree_is_valid() {

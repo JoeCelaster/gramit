@@ -35,6 +35,14 @@ pub fn get(key: Option<String>) -> Result<()> {
 }
 
 pub fn set(key: String, value: String) -> Result<()> {
+    // `backend_url` is the one setting people paste a bare host into, so accept that
+    // here the same way `gramit setup` does instead of failing validation on it.
+    let value = if key == "backend_url" {
+        gramit_core::config::normalize_backend_url(&value)
+    } else {
+        value
+    };
+
     let config = Config::load().map_err(|err| anyhow!(err))?;
     let mut table = to_table(&config)?;
 
@@ -147,9 +155,18 @@ mod tests {
     #[test]
     fn validation_still_applies_after_a_set() {
         let mut table = to_table(&Config::default()).unwrap();
-        table.insert("backend_url".into(), parse_scalar("127.0.0.1:8787"));
+        table.insert("max_chars".into(), parse_scalar("0"));
         let config: Config = toml::Value::Table(table).try_into().unwrap();
-        assert!(config.validate().is_err(), "a URL without a scheme must be refused");
+        assert!(config.validate().is_err(), "max_chars = 0 must be refused");
+    }
+
+    #[test]
+    fn a_bare_host_is_normalized_before_it_is_stored() {
+        // What `set` does to the value before it reaches the table.
+        assert_eq!(
+            gramit_core::config::normalize_backend_url("example.vercel.app"),
+            "https://example.vercel.app"
+        );
     }
 
     #[test]

@@ -123,6 +123,10 @@ async fn check_daemon(findings: &mut Findings) -> Option<Box<StatusReport>> {
     }
 }
 
+/// Said the same way wherever the backend turns out to be unset, because it is the
+/// one finding a brand-new install will always have.
+const NOT_CONFIGURED: &str = "no backend configured — set one with: gramit setup";
+
 async fn check_backend(
     findings: &mut Findings,
     config: Option<&Config>,
@@ -130,24 +134,28 @@ async fn check_backend(
 ) {
     // Prefer the daemon's view, since that is the connection that actually matters.
     if let Some(report) = status {
+        let Some(url) = report.backend_url.as_deref() else {
+            findings.fail("backend", NOT_CONFIGURED);
+            return;
+        };
         if !report.backend_reachable {
             findings.fail(
                 "backend",
                 &format!(
-                    "{} is unreachable — start it with: cd backend && npm start",
-                    report.backend_url
+                    "{url} is unreachable.\n\
+                     check the address with: gramit config get backend_url\n\
+                     change it with: gramit setup"
                 ),
             );
             return;
         }
         match report.backend_has_key {
-            Some(true) => findings.ok("backend", &report.backend_url),
+            Some(true) => findings.ok("backend", url),
             _ => findings.fail(
                 "backend",
                 &format!(
-                    "{} is running but has no Azure OpenAI key.\n\
-                     copy backend/.env.example to backend/.env and fill it in",
-                    report.backend_url
+                    "{url} is running but has no Azure OpenAI key.\n\
+                     that is set where the backend is deployed, not on this machine"
                 ),
             ),
         }
@@ -156,7 +164,11 @@ async fn check_backend(
 
     // No daemon, so ask the backend ourselves rather than reporting nothing.
     let Some(config) = config else { return };
-    let client = match BackendClient::new(config.backend_url_trimmed(), Duration::from_secs(5)) {
+    let Some(url) = config.backend_url() else {
+        findings.fail("backend", NOT_CONFIGURED);
+        return;
+    };
+    let client = match BackendClient::new(&url, Duration::from_secs(5)) {
         Ok(client) => client,
         Err(err) => {
             findings.fail("backend", &format!("could not build an HTTP client: {err}"));
@@ -165,18 +177,18 @@ async fn check_backend(
     };
 
     match client.health().await {
-        Ok(health) if health.has_key => findings.ok("backend", config.backend_url_trimmed()),
+        Ok(health) if health.has_key => findings.ok("backend", &url),
         Ok(health) => findings.fail(
             "backend",
             &format!(
-                "running but not configured; missing: {}.\n\
-                 copy backend/.env.example to backend/.env and fill it in",
+                "running but has no model credentials; missing: {}.\n\
+                 those are set where the backend is deployed, not on this machine",
                 health.missing.join(", ")
             ),
         ),
         Err(err) => findings.fail(
             "backend",
-            &format!("{}\nstart it with: cd backend && npm start", err.message),
+            &format!("{}\npoint gramit somewhere else with: gramit setup", err.message),
         ),
     }
 }
