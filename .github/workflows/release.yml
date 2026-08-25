@@ -128,9 +128,15 @@ jobs:
           tar -czf "$name.tar.gz" "$name"
           shasum -a 256 "$name.tar.gz" > "$name.tar.gz.sha256"
           # install.sh reads the binaries out of a single top-level directory.
-          tar -tzf "$name.tar.gz"
-          tar -tzf "$name.tar.gz" | grep -qx "$name/gramit" \
-            || { echo "::error::unexpected archive layout"; exit 1; }
+          # Capture the listing instead of piping tar into grep: `grep -q` exits on
+          # the first match, tar then takes SIGPIPE on its next write, and pipefail
+          # turns that into a job failure even though the archive is fine.
+          listing=$(tar -tzf "$name.tar.gz")
+          printf '%s\n' "$listing"
+          for want in "$name/gramit" "$name/gramitd"; do
+            grep -qx "$want" <<< "$listing" \
+              || { echo "::error::$want missing from the archive"; exit 1; }
+          done
           cat "$name.tar.gz.sha256"
 
       - name: archive (zip)
