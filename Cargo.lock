@@ -820,7 +820,7 @@ dependencies = [
 
 [[package]]
 name = "gramit-cli"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "clap",
@@ -836,7 +836,7 @@ dependencies = [
 
 [[package]]
 name = "gramit-core"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "directories",
  "reqwest",
@@ -850,7 +850,7 @@ dependencies = [
 
 [[package]]
 name = "gramit-input"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "arboard",
  "ashpd",
@@ -869,7 +869,7 @@ dependencies = [
 
 [[package]]
 name = "gramitd"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1285,7 +1285,7 @@ checksum = "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad"
 
 [[package]]
 name = "lru-slab"
-version = "0.1.2"
+version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "112b39cec0b298b6c1999fee3e31427f74f676e4cb9879ed1a121b43661a4154"
 
