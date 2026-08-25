@@ -1,0 +1,15 @@
+# Deployment settings compiled into the gramit binaries.
+#
+# Committed on purpose: this is not a secret, it is the address the released
+# binaries talk to, and it has to be the same for everyone who builds the repo.
+# Secrets stay in backend/.env, which is never committed.
+#
+# This is the only place the backend's address is written down. crates/gramit-core/
+# build.rs reads it at build time and exposes it as `config::DEFAULT_BACKEND_URL`,
+# so no URL is hardcoded anywhere in the Rust sources. Change it here and rebuild.
+
+[backend]
+# Where the daemon sends text to be corrected. Point it at a backend you run
+# yourself with "http://127.0.0.1:8787".
+url = "https://gramitaihuntd.vercel.app"
+x

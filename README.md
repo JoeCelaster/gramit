@@ -24,15 +24,24 @@ that holds an API key.
 # 1. build
 cargo build --release          # produces target/release/gramit and gramitd
 
-# 2. configure the backend
+# 2. start gramit and check the setup
+gramit start
+gramit doctor --fix            # binds the hotkey and reports anything broken
+```
+
+Corrections go to the hosted backend named by `backend.url` in the workspace
+`deploy.toml`, so there is nothing to install for step 2 and no API key on your
+machine. That file is the single source for the address: `gramit-core` reads it at
+build time, and no URL is hardcoded in the Rust sources. To run the backend yourself
+instead:
+
+```bash
 cd backend
 npm install
 cp .env.example .env           # fill in your Azure OpenAI details
 npm run build && npm start     # listens on 127.0.0.1:8787
-
-# 3. start gramit and check the setup
-gramit start
-gramit doctor --fix            # binds the hotkey and reports anything broken
+gramit config set backend_url http://127.0.0.1:8787
+gramit restart
 ```
 
 `gramit doctor` is the command to reach for whenever something isn't working — every
@@ -63,11 +72,11 @@ gramit logs [-f] [-n N]       gramit doctor [--fix]
 | Setting | Default | Meaning |
 |---|---|---|
 | `hotkey` | `Ctrl+Alt+F` | The shortcut that fixes the selection |
-| `backend_url` | `http://127.0.0.1:8787` | Where the backend listens |
+| `backend_url` | `backend.url` from `deploy.toml` | Backend that corrects the text |
 | `mode` | `grammar` | Correction style |
 | `notifications` | `true` | Show a toast for each fix |
 | `max_chars` | `8000` | Refuse selections longer than this |
-| `request_timeout_ms` | `10000` | Give up on the backend after this long |
+| `request_timeout_ms` | `15000` | Give up on the backend after this long |
 | `modifier_release_ms` | `120` | Wait for you to let go of the hotkey before typing |
 | `copy_settle_ms` | `400` | How long to wait for the copy to land |
 | `paste_delay_ms` | `120` | Pause before pasting the correction |
