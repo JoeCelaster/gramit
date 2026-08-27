@@ -3,6 +3,7 @@
 //
 //   node backend/eval/run.mjs            # all cases
 //   node backend/eval/run.mjs tag        # only cases whose name matches "tag"
+//   node backend/eval/run.mjs grammar    # only the grammar-mode cases
 //   node backend/eval/run.mjs --runs 3   # repeat each case (the model is non-deterministic)
 //
 // Spawns its own backend on a spare port, so the one you have running is untouched.
@@ -23,12 +24,44 @@ const runsFlag = args.indexOf('--runs');
 const RUNS = runsFlag === -1 ? 1 : Number(args[runsFlag + 1] ?? 1);
 const filter = args.find((a) => !a.startsWith('--') && a !== String(RUNS));
 
+// The filter matches a case name or a whole mode, so `run.mjs grammar` runs one mode
+// and `run.mjs tag` runs one case.
 const cases = JSON.parse(readFileSync(path.join(HERE, 'cases.json'), 'utf8')).filter(
-  (c) => !filter || c.name.includes(filter),
+  (c) => !filter || c.name.includes(filter) || c.mode === filter,
 );
 
 // U+2019 counts as an apostrophe, so "don't" is one word however it is spelled.
 const words = (text) => text.toLowerCase().match(/[\p{L}\p{N}'\u2019+]+/gu) ?? [];
+
+/**
+ * Cheap syntax gate for the languages we can check without a toolchain.
+ *
+ * Only `js` is real parsing — a JS snippet that does not parse is proof the model
+ * returned prose or a truncated block. Every other language, `balanced` included,
+ * gets a bracket-and-quote balance check, which catches the same two failures for
+ * Java or Python without a toolchain installed for either.
+ */
+function syntaxFailure(language, output) {
+  if (language === 'js') {
+    try {
+      new Function(output);
+      return null;
+    } catch (err) {
+      return `is not parseable JavaScript: ${err.message}`;
+    }
+  }
+  const pairs = { '(': ')', '[': ']', '{': '}' };
+  const stack = [];
+  // Strings are skipped wholesale: a bracket inside one is data, not structure.
+  const stripped = output.replace(/(['"`])(?:\\.|(?!\1)[^\\])*\1/g, '""');
+  for (const char of stripped) {
+    if (pairs[char]) stack.push(pairs[char]);
+    else if (Object.values(pairs).includes(char) && stack.pop() !== char) {
+      return `unbalanced ${JSON.stringify(char)}`;
+    }
+  }
+  return stack.length ? `${stack.length} bracket(s) left open` : null;
+}
 
 function check(testCase, output) {
   const failures = [];
@@ -48,6 +81,16 @@ function check(testCase, output) {
   }
   for (const needle of testCase.forbid ?? []) {
     if (lower.includes(needle.toLowerCase())) failures.push(`invented ${JSON.stringify(needle)}`);
+  }
+  for (const source of testCase.matches ?? []) {
+    if (!new RegExp(source).test(output)) failures.push(`no match for /${source}/`);
+  }
+  for (const source of testCase.forbidMatches ?? []) {
+    if (new RegExp(source).test(output)) failures.push(`matched /${source}/`);
+  }
+  if (testCase.parsesAs) {
+    const failure = syntaxFailure(testCase.parsesAs, output);
+    if (failure) failures.push(failure);
   }
   if (testCase.endsWith && !output.trim().endsWith(testCase.endsWith)) {
     failures.push(`should end with ${JSON.stringify(testCase.endsWith)}`);
@@ -87,11 +130,11 @@ async function waitForHealth(deadlineMs = 30_000) {
   throw new Error(`backend did not start on ${BASE}`);
 }
 
-async function fix(text) {
+async function fix(text, mode) {
   const res = await fetch(`${BASE}/v1/fix`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, mode }),
   });
   const body = await res.json();
   if (!res.ok) throw new Error(`${body?.error?.code}: ${body?.error?.message}`);
@@ -118,20 +161,20 @@ try {
       total += 1;
       let output;
       try {
-        output = await fix(testCase.input);
+        output = await fix(testCase.input, testCase.mode);
       } catch (err) {
         failed += 1;
-        console.log(`✗ ${testCase.name}\n    request failed: ${err.message}\n`);
+        console.log(`✗ [${testCase.mode}] ${testCase.name}\n    request failed: ${err.message}\n`);
         continue;
       }
 
       const failures = check(testCase, output);
       if (failures.length === 0) {
-        console.log(`✓ ${testCase.name}`);
+        console.log(`✓ [${testCase.mode}] ${testCase.name}`);
         console.log(`    ${JSON.stringify(testCase.input)} → ${JSON.stringify(output)}`);
       } else {
         failed += 1;
-        console.log(`✗ ${testCase.name}`);
+        console.log(`✗ [${testCase.mode}] ${testCase.name}`);
         console.log(`    ${JSON.stringify(testCase.input)} → ${JSON.stringify(output)}`);
         for (const failure of failures) console.log(`    · ${failure}`);
         if (testCase.why) console.log(`    why it matters: ${testCase.why}`);

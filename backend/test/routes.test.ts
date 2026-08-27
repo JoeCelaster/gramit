@@ -71,7 +71,7 @@ describe('POST /v1/fix', () => {
     });
   });
 
-  it('defaults mode to grammar', async () => {
+  it('defaults mode to code', async () => {
     let seenMode: string | undefined;
     const app = appWith({
       async fix(text, mode) {
@@ -81,7 +81,30 @@ describe('POST /v1/fix', () => {
     });
 
     await request(app).post('/v1/fix').send({ text: 'hello' }).expect(200);
+    expect(seenMode).toBe('code');
+  });
+
+  it('passes an explicit mode through', async () => {
+    let seenMode: string | undefined;
+    const app = appWith({
+      async fix(text, mode) {
+        seenMode = mode;
+        return { corrected: text, changed: false, changes: 0, model: 'm', latency_ms: 1, cached: false };
+      },
+    });
+
+    await request(app).post('/v1/fix').send({ text: 'hello', mode: 'grammar' }).expect(200);
     expect(seenMode).toBe('grammar');
+  });
+
+  it('rejects a mode that is not one of the two', async () => {
+    const res = await request(appWith(okService))
+      .post('/v1/fix')
+      .send({ text: 'hello', mode: 'sarcastic' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('INVALID_REQUEST');
+    expect(res.body.error.message).toContain('mode');
   });
 
   it('rejects a missing text field', async () => {

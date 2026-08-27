@@ -165,6 +165,10 @@ path_line() {
     if [ "$(basename "${SHELL:-/bin/sh}")" = "fish" ]; then
         printf 'fish_add_path %s' "$INSTALL_DIR"
     else
+        # `$PATH` is meant to stay literal: this line is appended to the user's shell
+        # rc file, where their shell expands it at every login. Expanding it here would
+        # freeze today's PATH into the file for good.
+        # shellcheck disable=SC2016
         printf 'export PATH="%s:$PATH"' "$INSTALL_DIR"
     fi
 }

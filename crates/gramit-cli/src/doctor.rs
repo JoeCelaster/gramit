@@ -259,6 +259,11 @@ fn check_hotkey(
 
 /// The command a desktop keybinding should run: an absolute path, since the desktop
 /// environment does not inherit the user's PATH.
+///
+/// Linux-only, like its one caller: nothing else installs a desktop keybinding, and an
+/// ungated helper here is dead code on macOS and Windows, which CI builds with
+/// `-D warnings`.
+#[cfg(target_os = "linux")]
 fn selection_command() -> String {
     match std::env::current_exe() {
         Ok(path) => format!("{} fix --selection", path.display()),

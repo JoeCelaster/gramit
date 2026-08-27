@@ -78,11 +78,11 @@ export function createAzureCorrector(config: AzureConfig, timeoutMs: number): Co
   // Index of the first strategy this deployment accepted; sticky across calls.
   let strategyIndex = 0;
 
-  async function callOnce(text: string, strategy: Strategy): Promise<string> {
+  async function callOnce(text: string, mode: Mode, strategy: Strategy): Promise<string> {
     const response = await client.chat.completions.create({
       model: config.deployment,
       messages: [
-        { role: 'system', content: systemPrompt(strategy.jsonMode) },
+        { role: 'system', content: systemPrompt(strategy.jsonMode, mode) },
         { role: 'user', content: text },
       ],
       ...(strategy.temperature ? { temperature: 0 } : {}),
@@ -100,13 +100,13 @@ export function createAzureCorrector(config: AzureConfig, timeoutMs: number): Co
   }
 
   return {
-    async fix(text: string, _mode: Mode): Promise<CorrectionResult> {
+    async fix(text: string, mode: Mode): Promise<CorrectionResult> {
       let lastError: unknown;
 
       for (let i = strategyIndex; i < STRATEGIES.length; i += 1) {
         const strategy = STRATEGIES[i]!;
         try {
-          const raw = await callOnce(text, strategy);
+          const raw = await callOnce(text, mode, strategy);
           if (i !== strategyIndex) {
             log.info('adopted fallback request shape for deployment', {
               deployment: config.deployment,
@@ -115,7 +115,7 @@ export function createAzureCorrector(config: AzureConfig, timeoutMs: number): Co
             });
             strategyIndex = i;
           }
-          return { corrected: sanitizeCorrection(raw, text), model: config.deployment };
+          return { corrected: sanitizeCorrection(raw, text, mode), model: config.deployment };
         } catch (err) {
           lastError = err;
           if (!isUnsupportedParamError(err) || i === STRATEGIES.length - 1) break;

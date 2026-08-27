@@ -176,7 +176,7 @@ mod tests {
 
     #[test]
     fn serializes_the_fix_request_body() {
-        let body = FixRequestBody { text: "he go", mode: Mode::Grammar };
-        assert_eq!(serde_json::to_string(&body).unwrap(), r#"{"text":"he go","mode":"grammar"}"#);
+        let body = FixRequestBody { text: "he go", mode: Mode::Code };
+        assert_eq!(serde_json::to_string(&body).unwrap(), r#"{"text":"he go","mode":"code"}"#);
     }
 }

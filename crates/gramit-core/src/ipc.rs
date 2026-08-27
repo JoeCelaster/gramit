@@ -20,8 +20,12 @@ pub enum Request {
     /// Correct the supplied text and return it; nothing is pasted anywhere.
     Fix {
         text: String,
+        /// `None` means "whatever mode the daemon is in", which is what `gramit fix`
+        /// sends unless `--mode` overrides it. The daemon's config is the authority:
+        /// having the CLI read the mode itself would let the two disagree whenever
+        /// the file changed after the daemon started.
         #[serde(default)]
-        mode: Mode,
+        mode: Option<Mode>,
     },
     /// Run the full capture → correct → paste loop against the current selection.
     FixSelection,
@@ -132,13 +136,14 @@ mod tests {
         round_trip_request(Request::Shutdown);
         round_trip_request(Request::FixSelection);
         round_trip_request(Request::FixClipboard);
-        round_trip_request(Request::Fix { text: "he go".into(), mode: Mode::Grammar });
+        round_trip_request(Request::Fix { text: "he go".into(), mode: Some(Mode::Grammar) });
+        round_trip_request(Request::Fix { text: "f()".into(), mode: None });
     }
 
     #[test]
-    fn fix_mode_defaults_to_grammar() {
+    fn fix_without_a_mode_defers_to_the_daemon() {
         let request = decode_request(r#"{"type":"fix","text":"hello"}"#).unwrap();
-        assert_eq!(request, Request::Fix { text: "hello".into(), mode: Mode::Grammar });
+        assert_eq!(request, Request::Fix { text: "hello".into(), mode: None });
     }
 
     #[test]
@@ -175,7 +180,7 @@ mod tests {
             backend_reachable: true,
             backend_has_key: Some(false),
             backend_detail: Some("missing AZURE_OPENAI_API_KEY".into()),
-            mode: Mode::Grammar,
+            mode: Mode::Code,
             notifications: true,
             fixes_total: 3,
             last_error: None,

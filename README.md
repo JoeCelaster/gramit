@@ -1,11 +1,72 @@
 # gramit
 
-Fix your grammar from where you stay.
+Fix what you have selected, wherever you are.
 
-Select text in any app — Chrome, Slack, a text editor — press `Ctrl+Alt+F`
+Select text in any app — an editor, a chat box, a notes window — press `Ctrl+Alt+F`
 (`Ctrl+Option+F` on a Mac, which has no Alt key), and the selection is replaced in
-place with a corrected version. Grammar, spelling and punctuation only: your wording,
-voice and formatting are left alone.
+place. What it is replaced *with* depends on the mode:
+
+| Mode | What the hotkey does |
+|---|---|
+| `code` *(default)* | Writes and fixes code. A request in the selection's comments is the task |
+| `grammar` | Fixes grammar, spelling and punctuation. Your wording, voice and formatting are left alone |
+
+One mode is active at a time, because the hotkey carries no argument. `gramit start`
+asks which one with an arrow-key picker:
+
+```
+What should gramit do with the text you select?
+  ↑/↓ to move, Enter to choose, Esc to keep the current one
+
+  › code     write and fix code — comments in the selection are the request
+    grammar  fix grammar, spelling and punctuation — wording is left alone
+```
+
+Or switch any time with `gramit mode code` / `gramit mode grammar`, which saves the
+setting and restarts the daemon so it takes effect immediately.
+
+## Code mode
+
+There are two ways to ask, and both come back as code and nothing else.
+
+**Ask inside code you already have.** Write the request as a comment and select the
+whole block:
+
+```js
+// sort these by date, newest first
+function newest(items) {
+  return items;
+}
+```
+
+The block comes back sorted, with the comment gone because it has been answered.
+Everything else is returned untouched — the reply overwrites the selection exactly, so
+what you did not ask about does not change.
+
+**Or just ask.** Select a line of plain text:
+
+```
+Write Java code for two sum
+```
+
+and it is replaced by a complete Java file: the imports, the class, the method. No
+prose, no fences, no "here's the code" — those would land in the middle of your source
+file. If you do not name a language, gramit uses the one the surrounding code is
+written in.
+
+## Grammar mode
+
+`gramit mode grammar` turns the same hotkey into a proofreader:
+
+```
+he go to the store    →    He goes to the store.
+dont worry its fine   →    Don't worry, it's fine.
+```
+
+It repairs what is broken and nothing else. It will not swap a word for a synonym,
+join or split your sentences, expand a contraction, add a question tag you did not
+write, or touch anything inside backticks. Text that is already correct comes back
+unchanged.
 
 ```
 gramit (CLI) ──local socket──> gramitd (daemon) ──HTTP──> backend ──> Azure OpenAI
@@ -84,12 +145,13 @@ failed check prints what to do about it.
 
 ## The backend
 
-gramit does not correct text by itself. It sends the text to a small HTTP service —
-the backend — which calls a language model and sends the correction back.
+gramit does not do the fixing itself. It sends the selection, and the current mode, to
+a small HTTP service — the backend — which picks the prompt for that mode, calls a
+language model, and sends the result back.
 
 **No backend address is built into gramit.** There is no default, nothing is compiled
-in, and the binaries on the releases page point at nobody. You say where to send text
-and it is written to your own config file:
+in, and the binaries on the releases page point at nobody. You say where to send your
+code and it is written to your own config file:
 
 ```bash
 gramit setup                        # asks, checks the address answers, saves it
@@ -126,17 +188,21 @@ process only.
 ## Usage
 
 ```bash
-gramit fix "he go to the store"   # correct text, print the result
-echo "he go" | gramit fix -       # correct stdin
-gramit fix --clipboard            # correct the clipboard in place
-gramit fix --selection            # capture the selection, correct it, paste it back
+gramit mode                      # what does the hotkey do right now?
+gramit mode grammar              # switch, and restart the daemon to apply it
+
+gramit fix "he go to the store"  # fix in the current mode, print the result
+cat snippet.py | gramit fix -    # fix stdin
+gramit fix --clipboard           # fix the clipboard in place
+gramit fix --selection           # capture the selection, fix it, paste it back
+gramit fix "..." --mode grammar  # override the mode for this one fix
 ```
 
 `gramit fix --selection` is what the hotkey runs.
 
 ```bash
 gramit setup [url]            gramit start [--foreground]   gramit stop
-gramit restart                gramit status
+gramit restart                gramit status                 gramit mode [name]
 gramit config get [key]       gramit config set <key> <value>   gramit config path
 gramit logs [-f] [-n N]       gramit doctor [--fix]
 ```
@@ -149,14 +215,14 @@ gramit logs [-f] [-n N]       gramit doctor [--fix]
 | Setting | Default | Meaning |
 |---|---|---|
 | `hotkey` | `Ctrl+Alt+F` | The shortcut that fixes the selection. `Alt` means the Option (⌥) key on macOS; `Option` is accepted as a spelling too |
-| `backend_url` | *(none — you set it)* | Backend that corrects the text |
-| `mode` | `grammar` | Correction style |
+| `backend_url` | *(none — you set it)* | Backend that does the fixing |
+| `mode` | `code` | `code` or `grammar`. Prefer `gramit mode <name>`, which also applies it |
 | `notifications` | `true` | Show a toast for each fix |
-| `max_chars` | `8000` | Refuse selections longer than this |
+| `max_chars` | `16000` | Refuse selections longer than this |
 | `request_timeout_ms` | `15000` | Give up on the backend after this long |
 | `modifier_release_ms` | `120` | Wait for you to let go of the hotkey before typing |
 | `copy_settle_ms` | `400` | How long to wait for the copy to land |
-| `paste_delay_ms` | `120` | Pause before pasting the correction |
+| `paste_delay_ms` | `120` | Pause before pasting the result |
 | `restore_delay_ms` | `200` | Pause before restoring your clipboard |
 
 If the paste is unreliable on a slower machine, raise `paste_delay_ms` and
@@ -196,11 +262,11 @@ cargo test --workspace        # Rust: core, input, daemon, CLI
 cd backend && npm test        # backend
 
 # work on the daemon without Azure credentials:
-node backend/dev-stub.mjs     # canned corrections on 127.0.0.1:8787
+node backend/dev-stub.mjs     # canned replies on 127.0.0.1:8787
 ```
 
 The dev stub applies a handful of fixed substitutions instead of calling a model,
-which keeps the daemon's capture → correct → paste loop predictable enough to assert
+which keeps the daemon's capture → rewrite → paste loop predictable enough to assert
 on.
 
 ```
@@ -216,7 +282,7 @@ backend/               Node + Express + Azure OpenAI
 Tag and push; `.github/workflows/release.yml` does the rest.
 
 ```bash
-git tag v0.1.0 && git push origin v0.1.0
+git tag v0.2.0 && git push origin v0.2.0
 ```
 
 It refuses a tag that disagrees with `[workspace.package] version` in `Cargo.toml`,
