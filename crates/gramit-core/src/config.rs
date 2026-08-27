@@ -70,9 +70,13 @@ pub enum Mode {
     /// Read the selection together with any request written in its comments, and give
     /// back code: the same block carried out, or a whole program when the selection is
     /// only a request like "Write Java code for two sum".
-    #[default]
     Code,
     /// Grammar, spelling, punctuation only — preserves the author's voice.
+    ///
+    /// The default, because it is the safe one to press a hotkey on by accident: it
+    /// only ever repairs what is already there. Code mode rewrites, so it is opted
+    /// into rather than landed on.
+    #[default]
     Grammar,
 }
 
@@ -164,7 +168,7 @@ impl Default for Config {
         Self {
             hotkey: "Ctrl+Alt+F".to_string(),
             backend_url: String::new(),
-            mode: Mode::Code,
+            mode: Mode::Grammar,
             notifications: true,
             max_chars: 16_000,
             request_timeout_ms: 15_000,

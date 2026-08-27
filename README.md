@@ -8,8 +8,11 @@ place. What it is replaced *with* depends on the mode:
 
 | Mode | What the hotkey does |
 |---|---|
-| `code` *(default)* | Writes and fixes code. A request in the selection's comments is the task |
-| `grammar` | Fixes grammar, spelling and punctuation. Your wording, voice and formatting are left alone |
+| `grammar` *(default)* | Fixes grammar, spelling and punctuation. Your wording, voice and formatting are left alone |
+| `code` | Writes and fixes code. A request in the selection's comments is the task |
+
+Grammar is the default because it only ever repairs what is already there. Code mode
+rewrites the selection, so you opt into it rather than land on it.
 
 One mode is active at a time, because the hotkey carries no argument. `gramit start`
 asks which one with an arrow-key picker:
@@ -18,8 +21,8 @@ asks which one with an arrow-key picker:
 What should gramit do with the text you select?
   ↑/↓ to move, Enter to choose, Esc to keep the current one
 
-  › code     write and fix code — comments in the selection are the request
-    grammar  fix grammar, spelling and punctuation — wording is left alone
+    code     write and fix code — comments in the selection are the request
+  › grammar  fix grammar, spelling and punctuation — wording is left alone
 ```
 
 Or switch any time with `gramit mode code` / `gramit mode grammar`, which saves the
@@ -216,7 +219,7 @@ gramit logs [-f] [-n N]       gramit doctor [--fix]
 |---|---|---|
 | `hotkey` | `Ctrl+Alt+F` | The shortcut that fixes the selection. `Alt` means the Option (⌥) key on macOS; `Option` is accepted as a spelling too |
 | `backend_url` | *(none — you set it)* | Backend that does the fixing |
-| `mode` | `code` | `code` or `grammar`. Prefer `gramit mode <name>`, which also applies it |
+| `mode` | `grammar` | `code` or `grammar`. Prefer `gramit mode <name>`, which also applies it |
 | `notifications` | `true` | Show a toast for each fix |
 | `max_chars` | `16000` | Refuse selections longer than this |
 | `request_timeout_ms` | `15000` | Give up on the backend after this long |
@@ -282,7 +285,7 @@ backend/               Node + Express + Azure OpenAI
 Tag and push; `.github/workflows/release.yml` does the rest.
 
 ```bash
-git tag v0.2.0 && git push origin v0.2.0
+git tag v0.2.1 && git push origin v0.2.1
 ```
 
 It refuses a tag that disagrees with `[workspace.package] version` in `Cargo.toml`,

@@ -1,8 +1,13 @@
 export const MODES = ['code', 'grammar'] as const;
 export type Mode = (typeof MODES)[number];
 
-/** What a client gets when it says nothing. Code is the mode gramit leads with. */
-export const DEFAULT_MODE: Mode = 'code';
+/**
+ * What a client gets when it says nothing.
+ *
+ * Grammar, because it is the mode that only ever repairs what is already there. Code
+ * mode rewrites the selection, so it is opted into rather than defaulted into.
+ */
+export const DEFAULT_MODE: Mode = 'grammar';
 
 const CODE_RULES = `You are a coding engine. The user selected a region of text and pressed a hotkey. Whatever you return is pasted straight back over that selection, replacing it character for character. You return code, and only code, every single time.
 

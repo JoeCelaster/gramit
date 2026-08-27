@@ -71,7 +71,7 @@ describe('POST /v1/fix', () => {
     });
   });
 
-  it('defaults mode to code', async () => {
+  it('defaults mode to grammar', async () => {
     let seenMode: string | undefined;
     const app = appWith({
       async fix(text, mode) {
@@ -81,7 +81,7 @@ describe('POST /v1/fix', () => {
     });
 
     await request(app).post('/v1/fix').send({ text: 'hello' }).expect(200);
-    expect(seenMode).toBe('code');
+    expect(seenMode).toBe('grammar');
   });
 
   it('passes an explicit mode through', async () => {
