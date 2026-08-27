@@ -60,19 +60,43 @@ impl std::fmt::Display for Capture {
     }
 }
 
+/// What gramit does with a selection.
+///
+/// One process-wide setting rather than a per-request choice: the hotkey carries no
+/// argument, so whatever is in the config is what pressing it means.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Mode {
-    /// Grammar, spelling, punctuation only — preserves the author's voice.
+    /// Read the selection together with any request written in its comments, and give
+    /// back code: the same block carried out, or a whole program when the selection is
+    /// only a request like "Write Java code for two sum".
     #[default]
+    Code,
+    /// Grammar, spelling, punctuation only — preserves the author's voice.
     Grammar,
+}
+
+impl Mode {
+    /// Every mode, in the order they are offered at the prompt.
+    pub const ALL: [Mode; 2] = [Mode::Code, Mode::Grammar];
+
+    /// One line of help, for the mode prompt and `gramit mode` with no argument.
+    pub fn summary(&self) -> &'static str {
+        match self {
+            Mode::Code => "write and fix code — comments in the selection are the request",
+            Mode::Grammar => "fix grammar, spelling and punctuation — wording is left alone",
+        }
+    }
 }
 
 impl std::fmt::Display for Mode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Mode::Grammar => write!(f, "grammar"),
-        }
+        // `f.pad` rather than `write!`, so `{mode:<8}` lines the mode menu up into
+        // columns. A plain `write!` silently ignores width and alignment.
+        f.pad(match self {
+            Mode::Code => "code",
+            Mode::Grammar => "grammar",
+        })
     }
 }
 
@@ -81,8 +105,9 @@ impl std::str::FromStr for Mode {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.trim().to_ascii_lowercase().as_str() {
-            "grammar" => Ok(Mode::Grammar),
-            other => Err(format!("unknown mode {other:?} (expected: grammar)")),
+            "code" | "c" => Ok(Mode::Code),
+            "grammar" | "g" | "text" => Ok(Mode::Grammar),
+            other => Err(format!("unknown mode {other:?} (expected: code or grammar)")),
         }
     }
 }
@@ -95,7 +120,7 @@ impl std::str::FromStr for Mode {
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
     pub hotkey: String,
-    /// Where text is sent to be corrected. Empty until `gramit setup` fills it in.
+    /// Where selections are sent to be fixed. Empty until `gramit setup` fills it in.
     ///
     /// There is deliberately no default and nothing compiled into the binary: this
     /// repository is public, so a built-in address would point every install at
@@ -105,6 +130,11 @@ pub struct Config {
     pub mode: Mode,
     pub notifications: bool,
     /// Selections longer than this are refused before a request is made.
+    ///
+    /// Sized for a whole source file, not a sentence: the usual gesture is select-all
+    /// in the file you are editing. It stays under the backend's own 25,000-character
+    /// ceiling so an over-long selection is refused here, instantly, rather than after
+    /// a round trip.
     pub max_chars: usize,
     /// Budget for one correction. The default backend is remote, so this covers a
     /// round trip plus the model's own latency, not just the model's.
@@ -134,9 +164,9 @@ impl Default for Config {
         Self {
             hotkey: "Ctrl+Alt+F".to_string(),
             backend_url: String::new(),
-            mode: Mode::Grammar,
+            mode: Mode::Code,
             notifications: true,
-            max_chars: 8_000,
+            max_chars: 16_000,
             request_timeout_ms: 15_000,
             capture: Capture::Copy,
             // Generous on purpose: a Ctrl+Alt+F chord is commonly held 300-500ms, and
@@ -360,9 +390,35 @@ mod tests {
 
     #[test]
     fn mode_parses_from_str() {
+        assert_eq!("code".parse::<Mode>().unwrap(), Mode::Code);
+        assert_eq!(" CODE ".parse::<Mode>().unwrap(), Mode::Code);
         assert_eq!("grammar".parse::<Mode>().unwrap(), Mode::Grammar);
         assert_eq!(" GRAMMAR ".parse::<Mode>().unwrap(), Mode::Grammar);
         assert!("sarcastic".parse::<Mode>().is_err());
+    }
+
+    #[test]
+    fn mode_display_honours_width() {
+        // The mode prompt prints a padded column; `write!` would drop the padding.
+        assert_eq!(format!("[{:<8}]", Mode::Code), "[code    ]");
+        assert_eq!(format!("{}", Mode::Grammar), "grammar");
+    }
+
+    #[test]
+    fn mode_accepts_a_single_letter() {
+        // The mode prompt shows "[c/g]", so those two answers have to work.
+        assert_eq!("c".parse::<Mode>().unwrap(), Mode::Code);
+        assert_eq!("g".parse::<Mode>().unwrap(), Mode::Grammar);
+    }
+
+    #[test]
+    fn every_mode_round_trips_through_its_own_name() {
+        // Display feeds the config file and the wire format, FromStr reads both back.
+        for mode in Mode::ALL {
+            assert_eq!(mode.to_string().parse::<Mode>().unwrap(), mode);
+            let config: Config = toml::from_str(&format!("mode = \"{mode}\"")).unwrap();
+            assert_eq!(config.mode, mode);
+        }
     }
 
     #[test]

@@ -19,5 +19,6 @@ serde_json.workspace = true
 tokio.workspace = true
 toml = "1.0"
 clap = { version = "4", features = ["derive"] }
+crossterm.workspace = true
 interprocess = { version = "2.4", features = ["tokio"] }
 notify-rust = "4"

@@ -19,7 +19,7 @@ const base = { maxChars: 100 };
 describe('createFixService', () => {
   it('corrects text and counts the changes', async () => {
     const service = createFixService({ ...base, corrector: fakeCorrector('He goes to the store.') });
-    const out = await service.fix('he go to the store', 'grammar');
+    const out = await service.fix('he go to the store', 'code');
 
     expect(out.corrected).toBe('He goes to the store.');
     expect(out.changed).toBe(true);
@@ -30,7 +30,7 @@ describe('createFixService', () => {
   it('reports changed=false and 0 changes for already-correct text', async () => {
     const clean = 'He goes to the store.';
     const service = createFixService({ ...base, corrector: fakeCorrector(clean) });
-    const out = await service.fix(clean, 'grammar');
+    const out = await service.fix(clean, 'code');
 
     expect(out.changed).toBe(false);
     expect(out.changes).toBe(0);
@@ -42,20 +42,20 @@ describe('createFixService', () => {
     const corrector = fakeCorrector('He goes to the store.');
     const service = createFixService({ ...base, corrector });
 
-    await service.fix('he go to the store', 'grammar');
-    await service.fix('he go to the store', 'grammar');
+    await service.fix('he go to the store', 'code');
+    await service.fix('he go to the store', 'code');
 
     expect(corrector.calls).toBe(2);
   });
 
   it('rejects whitespace-only text', async () => {
     const service = createFixService({ ...base, corrector: fakeCorrector('x') });
-    await expect(service.fix('   \n ', 'grammar')).rejects.toMatchObject({ code: 'EMPTY_TEXT' });
+    await expect(service.fix('   \n ', 'code')).rejects.toMatchObject({ code: 'EMPTY_TEXT' });
   });
 
   it('rejects text over the limit', async () => {
     const service = createFixService({ ...base, corrector: fakeCorrector('x') });
-    await expect(service.fix('a'.repeat(101), 'grammar')).rejects.toMatchObject({ code: 'TOO_LONG' });
+    await expect(service.fix('a'.repeat(101), 'code')).rejects.toMatchObject({ code: 'TOO_LONG' });
   });
 
   it('fails with NO_API_KEY when Azure is not configured', async () => {
@@ -65,7 +65,7 @@ describe('createFixService', () => {
       missingAzureVars: ['AZURE_OPENAI_API_KEY'],
     });
 
-    const err = await service.fix('hello', 'grammar').catch((e: unknown) => e);
+    const err = await service.fix('hello', 'code').catch((e: unknown) => e);
     expect(err).toBeInstanceOf(AppError);
     expect(err).toMatchObject({ code: 'NO_API_KEY', status: 503 });
     expect((err as AppError).message).toContain('AZURE_OPENAI_API_KEY');
@@ -75,7 +75,7 @@ describe('createFixService', () => {
     const now = vi.fn().mockReturnValueOnce(1_000).mockReturnValue(1_250);
     const service = createFixService({ ...base, corrector: fakeCorrector('Fixed.'), now });
 
-    const out = await service.fix('fixed', 'grammar');
+    const out = await service.fix('fixed', 'code');
     expect(out.latency_ms).toBe(250);
   });
 });

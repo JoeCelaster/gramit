@@ -31,7 +31,7 @@ pub async fn register(hotkey: &str) -> Result<HotkeyRegistration, InputError> {
         .await
         .map_err(|err| portal_error("could not listen for shortcut activations", err))?;
 
-    let shortcut = NewShortcut::new(SHORTCUT_ID, "Fix grammar in the current selection")
+    let shortcut = NewShortcut::new(SHORTCUT_ID, "Fix the current selection")
         .preferred_trigger(trigger.as_str());
 
     let bound = proxy

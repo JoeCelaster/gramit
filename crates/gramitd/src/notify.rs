@@ -5,6 +5,7 @@
 //! toast, including the boring ones, so a silent failure is never mistaken for
 //! "nothing needed fixing".
 
+use gramit_core::config::Mode;
 use gramit_core::Config;
 use tracing::{debug, warn};
 
@@ -29,24 +30,48 @@ pub trait Notifier: Send + Sync {
 }
 
 /// Builds the toast for an outcome. Pure, so the wording is testable.
-pub fn notification_for(outcome: &FixOutcome) -> Notification {
+///
+/// The mode decides the words. "Fixed 3 issues" is right for prose and wrong for code,
+/// where a word diff counts a renamed variable once per use; "Code updated" is right
+/// for code and says nothing to somebody correcting an email.
+pub fn notification_for(outcome: &FixOutcome, mode: Mode) -> Notification {
     match outcome {
         FixOutcome::Replaced { changes, .. } => Notification {
-            summary: match changes {
-                0 | 1 => "Fixed 1 issue".to_string(),
-                n => format!("Fixed {n} issues"),
+            summary: match mode {
+                Mode::Code => "Code updated".to_string(),
+                Mode::Grammar => match changes {
+                    0 | 1 => "Fixed 1 issue".to_string(),
+                    n => format!("Fixed {n} issues"),
+                },
             },
-            body: None,
+            // In code mode the count is detail rather than headline, because it
+            // overstates small edits. In grammar mode the summary already carries it.
+            body: match mode {
+                Mode::Code => Some(match changes {
+                    0 | 1 => "1 edit pasted over your selection.".to_string(),
+                    n => format!("{n} edits pasted over your selection."),
+                }),
+                Mode::Grammar => None,
+            },
             urgency: Urgency::Low,
         },
         FixOutcome::AlreadyCorrect { .. } => Notification {
-            summary: "Looks good already".to_string(),
-            body: Some("No changes needed.".to_string()),
+            summary: match mode {
+                Mode::Code => "No changes needed".to_string(),
+                Mode::Grammar => "Looks good already".to_string(),
+            },
+            body: Some(match mode {
+                Mode::Code => "The code already does what its comments ask for.".to_string(),
+                Mode::Grammar => "No changes needed.".to_string(),
+            }),
             urgency: Urgency::Low,
         },
         FixOutcome::NoSelection => Notification {
             summary: "Nothing selected".to_string(),
-            body: Some("Select some text, then press the hotkey.".to_string()),
+            body: Some(match mode {
+                Mode::Code => "Select some code, then press the hotkey.".to_string(),
+                Mode::Grammar => "Select some text, then press the hotkey.".to_string(),
+            }),
             urgency: Urgency::Normal,
         },
         FixOutcome::Failed { code, message, .. } => Notification {
@@ -67,7 +92,7 @@ fn summary_for_code(code: &str) -> &'static str {
         "RATE_LIMITED" => "Rate limited",
         "TOO_LONG" => "Selection too long",
         "BUSY" => "Already fixing something",
-        "INJECTION_ERROR" | "PORTAL_ERROR" => "Could not type the correction",
+        "INJECTION_ERROR" | "PORTAL_ERROR" => "Could not paste the result",
         "CLIPBOARD_ERROR" => "Could not read the clipboard",
         _ => "Could not fix that",
     }
@@ -164,34 +189,65 @@ mod tests {
     }
 
     #[test]
-    fn pluralizes_the_change_count() {
-        assert_eq!(notification_for(&replaced(1)).summary, "Fixed 1 issue");
-        assert_eq!(notification_for(&replaced(3)).summary, "Fixed 3 issues");
+    fn code_mode_puts_the_edit_count_in_the_body() {
+        assert_eq!(notification_for(&replaced(1), Mode::Code).summary, "Code updated");
+        let one = notification_for(&replaced(1), Mode::Code).body.unwrap();
+        let three = notification_for(&replaced(3), Mode::Code).body.unwrap();
+        assert_eq!(one, "1 edit pasted over your selection.");
+        assert_eq!(three, "3 edits pasted over your selection.");
+    }
+
+    #[test]
+    fn grammar_mode_counts_the_issues_in_the_summary() {
+        // The wording each mode earned: a word diff means something on prose.
+        assert_eq!(notification_for(&replaced(1), Mode::Grammar).summary, "Fixed 1 issue");
+        assert_eq!(notification_for(&replaced(3), Mode::Grammar).summary, "Fixed 3 issues");
+        assert_eq!(notification_for(&replaced(3), Mode::Grammar).body, None);
     }
 
     #[test]
     fn a_success_toast_is_low_urgency() {
         // A fix the user asked for shouldn't demand attention the way a failure does.
-        assert_eq!(notification_for(&replaced(2)).urgency, Urgency::Low);
+        assert_eq!(notification_for(&replaced(2), Mode::Code).urgency, Urgency::Low);
+        assert_eq!(notification_for(&replaced(2), Mode::Grammar).urgency, Urgency::Low);
     }
 
     #[test]
     fn already_correct_says_so_without_alarming() {
-        let notification = notification_for(&FixOutcome::AlreadyCorrect {
+        let outcome = FixOutcome::AlreadyCorrect {
             text: "Fine.".into(),
             model: "m".into(),
             latency_ms: 1,
             cached: true,
-        });
-        assert_eq!(notification.summary, "Looks good already");
-        assert_eq!(notification.urgency, Urgency::Low);
+        };
+        assert_eq!(notification_for(&outcome, Mode::Code).summary, "No changes needed");
+        assert_eq!(notification_for(&outcome, Mode::Grammar).summary, "Looks good already");
+        assert_eq!(notification_for(&outcome, Mode::Code).urgency, Urgency::Low);
     }
 
     #[test]
     fn no_selection_tells_the_user_what_to_do() {
-        let notification = notification_for(&FixOutcome::NoSelection);
-        assert_eq!(notification.summary, "Nothing selected");
-        assert!(notification.body.unwrap().contains("Select some text"));
+        let code = notification_for(&FixOutcome::NoSelection, Mode::Code);
+        assert_eq!(code.summary, "Nothing selected");
+        assert!(code.body.unwrap().contains("Select some code"));
+
+        let grammar = notification_for(&FixOutcome::NoSelection, Mode::Grammar);
+        assert!(grammar.body.unwrap().contains("Select some text"));
+    }
+
+    #[test]
+    fn failures_read_the_same_in_either_mode() {
+        // A backend that is down is a backend that is down. Only the words for a
+        // successful fix depend on what the fix was.
+        let outcome = FixOutcome::Failed {
+            code: "NO_API_KEY".into(),
+            message: "Azure OpenAI is not configured on the backend.".into(),
+            retryable: false,
+        };
+        assert_eq!(
+            notification_for(&outcome, Mode::Code),
+            notification_for(&outcome, Mode::Grammar)
+        );
     }
 
     #[test]
@@ -200,7 +256,7 @@ mod tests {
             code: "NO_API_KEY".into(),
             message: "Azure OpenAI is not configured on the backend.".into(),
             retryable: false,
-        });
+        }, Mode::Code);
 
         assert_eq!(notification.summary, "gramit backend has no API key");
         assert_eq!(notification.urgency, Urgency::Critical);
@@ -211,7 +267,7 @@ mod tests {
     fn known_codes_get_human_summaries() {
         assert_eq!(summary_for_code("BACKEND_UNREACHABLE"), "gramit backend is not running");
         assert_eq!(summary_for_code("TOO_LONG"), "Selection too long");
-        assert_eq!(summary_for_code("INJECTION_ERROR"), "Could not type the correction");
+        assert_eq!(summary_for_code("INJECTION_ERROR"), "Could not paste the result");
     }
 
     #[test]
@@ -220,7 +276,7 @@ mod tests {
             code: "SOMETHING_NEW".into(),
             message: "detail".into(),
             retryable: true,
-        });
+        }, Mode::Code);
         assert_eq!(notification.summary, "Could not fix that");
         assert_eq!(notification.body.as_deref(), Some("detail"));
     }

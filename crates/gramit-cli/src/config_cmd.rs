@@ -60,7 +60,14 @@ pub fn set(key: String, value: String) -> Result<()> {
     let written = updated.save().map_err(|err| anyhow!(err))?;
     println!("{}", ui::ok(&format!("{key} = {value}")));
     println!("{}", ui::detail(&format!("saved to {}", written.display())));
-    println!("{}", ui::detail("restart the daemon to apply: gramit restart"));
+
+    // `gramit mode` saves and restarts in one step, so point at it rather than leave
+    // someone to discover that their new mode did nothing until the next restart.
+    if key == "mode" {
+        println!("{}", ui::detail("apply it now with: gramit mode <name>"));
+    } else {
+        println!("{}", ui::detail("restart the daemon to apply: gramit restart"));
+    }
     Ok(())
 }
 
@@ -171,7 +178,7 @@ mod tests {
 
     #[test]
     fn renders_strings_without_quotes() {
-        assert_eq!(render(&toml::Value::String("grammar".into())), "grammar");
+        assert_eq!(render(&toml::Value::String("code".into())), "code");
         assert_eq!(render(&toml::Value::Integer(42)), "42");
     }
 }

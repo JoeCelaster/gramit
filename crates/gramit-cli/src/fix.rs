@@ -36,10 +36,12 @@ async fn fix_text(text: Option<String>, mode: Option<Mode>) -> Result<()> {
     };
 
     if input.trim().is_empty() {
-        return Err(anyhow!("no text to correct (pass text, or pipe it in)"));
+        return Err(anyhow!("nothing to fix (pass text, or pipe it in)"));
     }
 
-    let request = Request::Fix { text: input, mode: mode.unwrap_or_default() };
+    // No `--mode` means no opinion: the daemon fills in its own configured mode, so
+    // `gramit fix` and the hotkey always agree on what a fix means.
+    let request = Request::Fix { text: input, mode };
 
     match client::request(request).await? {
         Response::Fixed { text, changed, changes, .. } => {
@@ -52,9 +54,9 @@ async fn fix_text(text: Option<String>, mode: Option<Mode>) -> Result<()> {
             std::io::stdout().flush().ok();
 
             if changed {
-                eprintln!("{}", ui::dim(&format!("{changes} correction(s)")));
+                eprintln!("{}", ui::dim(&format!("{changes} edit(s)")));
             } else {
-                eprintln!("{}", ui::dim("already correct"));
+                eprintln!("{}", ui::dim("no changes needed"));
             }
             Ok(())
         }
@@ -66,7 +68,7 @@ async fn fix_text(text: Option<String>, mode: Option<Mode>) -> Result<()> {
 fn read_stdin() -> Result<String> {
     if std::io::stdin().is_terminal() {
         return Err(anyhow!(
-            "no text given.\nUsage: gramit fix \"he go to the store\"  |  echo ... | gramit fix -"
+            "nothing given.\nUsage: gramit fix \"he go to the store\"  |  cat snippet.py | gramit fix -"
         ));
     }
     let mut buffer = String::new();
@@ -80,10 +82,10 @@ async fn fix_clipboard() -> Result<()> {
     match client::request(Request::FixClipboard).await? {
         Response::Fixed { changed, changes, text, .. } => {
             if changed {
-                println!("{}", ui::ok(&format!("clipboard fixed ({changes} correction(s))")));
+                println!("{}", ui::ok(&format!("clipboard rewritten ({changes} edit(s))")));
                 eprintln!("{}", ui::dim(&preview(&text)));
             } else {
-                println!("{}", ui::ok("clipboard was already correct"));
+                println!("{}", ui::ok("clipboard needed no changes"));
             }
             Ok(())
         }
@@ -109,9 +111,9 @@ async fn fix_selection() -> Result<()> {
     match response {
         Response::Fixed { changed, changes, .. } => {
             if changed {
-                println!("{}", ui::ok(&format!("selection fixed ({changes} correction(s))")));
+                println!("{}", ui::ok(&format!("selection rewritten ({changes} edit(s))")));
             } else {
-                println!("{}", ui::ok("selection was already correct"));
+                println!("{}", ui::ok("selection needed no changes"));
             }
             Ok(())
         }

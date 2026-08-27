@@ -14,7 +14,7 @@ use crate::state::DaemonState;
 /// the user must be told about, exactly like a backend failure.
 pub async fn run(state: &Arc<DaemonState>) -> FixOutcome {
     let outcome = run_inner(state).await;
-    state.notifier.notify(notification_for(&outcome));
+    state.notifier.notify(notification_for(&outcome, state.config.mode));
     outcome
 }
 

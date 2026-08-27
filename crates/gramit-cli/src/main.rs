@@ -10,6 +10,7 @@ mod doctor;
 mod fix;
 mod lifecycle;
 mod logs;
+mod mode;
 mod setup;
 mod ui;
 
@@ -22,7 +23,7 @@ use gramit_core::VERSION;
 #[command(
     name = "gramit",
     version = VERSION,
-    about = "Fix the grammar of the text you have selected, anywhere",
+    about = "Fix whatever you have selected, anywhere — code or grammar",
     long_about = None,
 )]
 struct Cli {
@@ -32,7 +33,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Tell gramit which backend to send text to
+    /// Tell gramit which backend to send selections to
     Setup {
         /// The backend address. Omit it and you will be asked.
         url: Option<String>,
@@ -52,8 +53,13 @@ enum Command {
     Restart,
     /// Show what the daemon is doing
     Status,
-    /// Correct text, the clipboard, or the current selection
+    /// Fix text, the clipboard, or the current selection
     Fix(FixArgs),
+    /// Show what gramit does with a selection, or change it
+    Mode {
+        /// `code` or `grammar`. Omit it to see the current one.
+        name: Option<Mode>,
+    },
     /// Read or change settings
     Config {
         #[command(subcommand)]
@@ -78,18 +84,18 @@ enum Command {
 
 #[derive(Args)]
 struct FixArgs {
-    /// Text to correct. Use `-`, or pipe input, to read stdin.
+    /// What to fix. Use `-`, or pipe input, to read stdin.
     text: Option<String>,
 
-    /// Correct the clipboard in place
+    /// Fix the clipboard in place
     #[arg(long, conflicts_with_all = ["selection", "text"])]
     clipboard: bool,
 
-    /// Correct the current selection and paste it back
+    /// Fix the current selection and paste it back
     #[arg(long, conflicts_with_all = ["clipboard", "text"])]
     selection: bool,
 
-    /// Correction mode
+    /// Override the saved mode for this one fix: `code` or `grammar`
     #[arg(long)]
     mode: Option<Mode>,
 }
@@ -109,9 +115,10 @@ async fn run() -> Result<()> {
     match cli.command {
         Command::Setup { url, force } => setup::run(url, force).await,
         Command::Start { foreground } => {
-            // The first thing a fresh install does. Asking here means the answer is
-            // saved before the daemon reads the config.
+            // Both prompts run before the daemon is spawned, so their answers are on
+            // disk by the time it reads the config.
             setup::ensure_configured().await?;
+            mode::prompt_on_start().await?;
             lifecycle::start(foreground).await
         }
         Command::Stop => lifecycle::stop().await,
@@ -127,6 +134,7 @@ async fn run() -> Result<()> {
             };
             fix::run(target, args.text, args.mode).await
         }
+        Command::Mode { name } => mode::run(name).await,
         Command::Config { command } => match command {
             ConfigCommand::Path => config_cmd::path(),
             ConfigCommand::Get { key } => config_cmd::get(key),
@@ -211,7 +219,7 @@ mod tests {
     #[test]
     fn an_unknown_mode_is_rejected() {
         assert!(Cli::try_parse_from(["gramit", "fix", "hi", "--mode", "sarcastic"]).is_err());
-        assert!(Cli::try_parse_from(["gramit", "fix", "hi", "--mode", "grammar"]).is_ok());
+        assert!(Cli::try_parse_from(["gramit", "fix", "hi", "--mode", "code"]).is_ok());
     }
 
     #[test]

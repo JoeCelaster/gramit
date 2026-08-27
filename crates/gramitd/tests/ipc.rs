@@ -47,7 +47,7 @@ async fn start_daemon_with(extra: &str) -> DaemonGuard {
     writeln!(
         config,
         "hotkey = \"Ctrl+Alt+F\"\n\
-         mode = \"grammar\"\n\
+         mode = \"code\"\n\
          notifications = false\n\
          max_chars = 20\n\
          request_timeout_ms = 500\n\

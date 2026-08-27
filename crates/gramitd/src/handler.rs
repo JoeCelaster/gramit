@@ -28,7 +28,10 @@ pub async fn handle(request: Request, state: &Arc<DaemonState>, shutdown: &Shutd
     }
 }
 
-async fn fix(state: &Arc<DaemonState>, text: String, mode: Mode) -> Response {
+/// `mode` is `None` when the caller did not override it, in which case the daemon's
+/// own configured mode applies — the same one the hotkey uses.
+async fn fix(state: &Arc<DaemonState>, text: String, mode: Option<Mode>) -> Response {
+    let mode = mode.unwrap_or(state.config.mode);
     if text.trim().is_empty() {
         return BackendError::empty_text().into();
     }
@@ -200,7 +203,7 @@ mod tests {
     async fn empty_text_is_rejected_without_calling_the_backend() {
         let state = state_with_dead_backend(100);
         let shutdown = Shutdown::new();
-        let request = Request::Fix { text: "   \n ".into(), mode: Mode::Grammar };
+        let request = Request::Fix { text: "   \n ".into(), mode: None };
 
         match handle(request, &state, &shutdown).await {
             Response::Error { code, .. } => assert_eq!(code, "EMPTY_TEXT"),
@@ -212,7 +215,7 @@ mod tests {
     async fn oversized_text_is_rejected_before_the_request() {
         let state = state_with_dead_backend(10);
         let shutdown = Shutdown::new();
-        let request = Request::Fix { text: "a".repeat(11), mode: Mode::Grammar };
+        let request = Request::Fix { text: "a".repeat(11), mode: None };
 
         match handle(request, &state, &shutdown).await {
             Response::Error { code, message, .. } => {
@@ -228,7 +231,7 @@ mod tests {
         // 5 characters, 10 bytes in UTF-8 — must pass a 5-character limit.
         let state = state_with_dead_backend(5);
         let shutdown = Shutdown::new();
-        let request = Request::Fix { text: "éèêëî".into(), mode: Mode::Grammar };
+        let request = Request::Fix { text: "éèêëî".into(), mode: None };
 
         match handle(request, &state, &shutdown).await {
             // Reaches the backend (and fails there), which proves the length check passed.
@@ -241,7 +244,7 @@ mod tests {
     async fn an_unreachable_backend_is_reported_and_recorded() {
         let state = state_with_dead_backend(100);
         let shutdown = Shutdown::new();
-        let request = Request::Fix { text: "he go".into(), mode: Mode::Grammar };
+        let request = Request::Fix { text: "he go".into(), mode: None };
 
         match handle(request, &state, &shutdown).await {
             Response::Error { code, retryable, .. } => {

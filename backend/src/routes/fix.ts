@@ -1,12 +1,12 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { AppError } from '../errors.js';
-import { MODES } from '../prompt.js';
+import { DEFAULT_MODE, MODES } from '../prompt.js';
 import type { FixService } from '../service.js';
 
 const FixRequest = z.object({
   text: z.string(),
-  mode: z.enum(MODES).default('grammar'),
+  mode: z.enum(MODES).default(DEFAULT_MODE),
 });
 
 export function fixRouter(service: FixService): Router {
