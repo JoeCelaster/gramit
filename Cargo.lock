@@ -887,7 +887,7 @@ dependencies = [
 
 [[package]]
 name = "gramit-cli"
-version = "0.2.1"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -896,6 +896,7 @@ dependencies = [
  "gramit-input",
  "interprocess",
  "notify-rust",
+ "reqwest",
  "serde",
  "serde_json",
  "tokio",
@@ -904,7 +905,7 @@ dependencies = [
 
 [[package]]
 name = "gramit-core"
-version = "0.2.1"
+version = "1.0.0"
 dependencies = [
  "directories",
  "reqwest",
@@ -918,7 +919,7 @@ dependencies = [
 
 [[package]]
 name = "gramit-input"
-version = "0.2.1"
+version = "1.0.0"
 dependencies = [
  "arboard",
  "ashpd",
@@ -937,7 +938,7 @@ dependencies = [
 
 [[package]]
 name = "gramitd"
-version = "0.2.1"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "async-trait",

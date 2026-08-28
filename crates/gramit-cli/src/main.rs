@@ -12,6 +12,7 @@ mod lifecycle;
 mod logs;
 mod mode;
 mod setup;
+mod update;
 mod ui;
 
 use anyhow::Result;
@@ -57,7 +58,7 @@ enum Command {
     Fix(FixArgs),
     /// Show what gramit does with a selection, or change it
     Mode {
-        /// `code` or `grammar`. Omit it to see the current one.
+        /// `grammar`, `write` or `code`. Omit it to see the current one.
         name: Option<Mode>,
     },
     /// Read or change settings
@@ -80,6 +81,17 @@ enum Command {
         #[arg(long)]
         fix: bool,
     },
+    /// Show which version this is, and what the running daemon is
+    Version,
+    /// Install the newest release over this one
+    Update {
+        /// Only say whether a newer release exists; change nothing
+        #[arg(long)]
+        check: bool,
+        /// Install it without asking first
+        #[arg(short = 'y', long = "yes")]
+        assume_yes: bool,
+    },
 }
 
 #[derive(Args)]
@@ -95,7 +107,7 @@ struct FixArgs {
     #[arg(long, conflicts_with_all = ["clipboard", "text"])]
     selection: bool,
 
-    /// Override the saved mode for this one fix: `code` or `grammar`
+    /// Override the saved mode for this one fix: `code`, `grammar` or `write`
     #[arg(long)]
     mode: Option<Mode>,
 }
@@ -135,6 +147,8 @@ async fn run() -> Result<()> {
             fix::run(target, args.text, args.mode).await
         }
         Command::Mode { name } => mode::run(name).await,
+        Command::Version => update::version().await,
+        Command::Update { check, assume_yes } => update::run(check, assume_yes).await,
         Command::Config { command } => match command {
             ConfigCommand::Path => config_cmd::path(),
             ConfigCommand::Get { key } => config_cmd::get(key),
@@ -220,6 +234,7 @@ mod tests {
     fn an_unknown_mode_is_rejected() {
         assert!(Cli::try_parse_from(["gramit", "fix", "hi", "--mode", "sarcastic"]).is_err());
         assert!(Cli::try_parse_from(["gramit", "fix", "hi", "--mode", "code"]).is_ok());
+        assert!(Cli::try_parse_from(["gramit", "fix", "hi", "--mode", "write"]).is_ok());
     }
 
     #[test]

@@ -3,6 +3,7 @@
 import express from 'express';
 import { loadConfigFromDotenv } from './config.js';
 import { createApp } from './create-app.js';
+import { createLinkReader } from './links.js';
 import { createAzureCorrector } from './llm/azure.js';
 import { log } from './logger.js';
 import { VERSION } from './routes/health.js';
@@ -21,10 +22,19 @@ if (!config.azure) {
 
 const corrector = config.azure ? createAzureCorrector(config.azure, config.upstreamTimeoutMs) : null;
 
+// Write mode reads the pages an instruction links to. A page that will not load is
+// logged and dropped, never raised: the user asked for writing, not for a fetch.
+const links = config.links.enabled
+  ? createLinkReader(config.links, undefined, (url, reason) =>
+      log.warn('could not read a linked page', { url, reason }),
+    )
+  : null;
+
 const service = createFixService({
   corrector,
   maxChars: config.maxChars,
   missingAzureVars: config.missingAzureVars,
+  links,
 });
 
 const app = createApp({ config, service }, express());

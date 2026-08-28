@@ -4,7 +4,7 @@
 //
 // It fakes the fix with a deterministic edit rather than calling a model, so the
 // daemon's capture → fix → paste loop can be exercised end to end and the result is
-// predictable enough to assert on. Both modes are served, so switching with
+// predictable enough to assert on. Every mode is served, so switching with
 // `gramit mode` can be tested here too.
 //
 // In code mode:
@@ -12,6 +12,7 @@
 //   a bare request ("two sum")   → the whole selection becomes a stub function
 //   code that asks for nothing   → returned unchanged, and it reports "no changes"
 // In grammar mode a few canned corrections are applied instead.
+// In write mode the brief is replaced by a canned piece in the shape it asked for.
 
 import http from 'node:http';
 
@@ -82,6 +83,38 @@ function correct(text) {
   return out;
 }
 
+// Genre words a brief can name, and the shape the stub returns for each. Matched in
+// order, so "assignment brief" is checked before the bare "brief" that follows it.
+const FORMS = [
+  [/\b(?:e-?mail|mail)\b/i, 'email'],
+  [/\bletter\b/i, 'email'],
+  [/\bessay\b/i, 'essay'],
+  [/\b(?:assignment|brief|report|article)\b/i, 'essay'],
+  [/\b(?:paragraph|para)\b/i, 'paragraph'],
+];
+
+/**
+ * Fakes the write with a piece that names the brief it came from, so a paste is
+ * obvious and the same brief always produces the same piece.
+ *
+ * The brief itself never survives, which is the one property write mode has to have:
+ * getting it back means nothing was written.
+ */
+function compose(text) {
+  const brief = text.trim();
+  const form = FORMS.find(([pattern]) => pattern.test(brief))?.[1] ?? 'paragraph';
+  const lead = /^\s*/.exec(text)[0];
+  const trail = /\s*$/.exec(text)[0];
+
+  const body = {
+    email: `Subject: ${brief}\n\nHi,\n\nThis is a stub email about ${JSON.stringify(brief)}.\n\nBest regards,\n[Your Name]`,
+    essay: `This is a stub essay about ${JSON.stringify(brief)}.\n\nIt has a second paragraph, so a multi-paragraph paste can be checked.`,
+    paragraph: `This is a stub paragraph about ${JSON.stringify(brief)}.`,
+  }[form];
+
+  return `${lead}${body}${trail}`;
+}
+
 function countChanges(before, after) {
   if (before === after) return 0;
   const a = before.split(/\s+/);
@@ -131,7 +164,8 @@ const server = http.createServer((req, res) => {
         });
       }
 
-      const corrected = mode === 'grammar' ? correct(text) : rewrite(text);
+      const corrected =
+        mode === 'grammar' ? correct(text) : mode === 'write' ? compose(text) : rewrite(text);
       console.log(`fix [${mode ?? 'code'}]: ${JSON.stringify(text)} -> ${JSON.stringify(corrected)}`);
       return send(200, {
         corrected,

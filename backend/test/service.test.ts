@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AppError } from '../src/errors.js';
+import type { LinkContext, LinkReader } from '../src/links.js';
 import type { Corrector } from '../src/llm/azure.js';
 import { createFixService } from '../src/service.js';
 
@@ -77,5 +78,75 @@ describe('createFixService', () => {
 
     const out = await service.fix('fixed', 'code');
     expect(out.latency_ms).toBe(250);
+  });
+});
+
+describe('linked content', () => {
+  /** Records what the corrector was handed alongside the instruction. */
+  function recordingCorrector(): Corrector & { context: string | undefined } {
+    const stub = {
+      context: undefined as string | undefined,
+      async fix(_text: string, _mode: never, context?: string) {
+        stub.context = context;
+        return { corrected: 'a written piece', model: 'm' };
+      },
+    };
+    return stub as unknown as Corrector & { context: string | undefined };
+  }
+
+  function fakeLinks(contexts: LinkContext[]): LinkReader & { calls: number } {
+    const stub = {
+      calls: 0,
+      async read() {
+        stub.calls += 1;
+        return contexts;
+      },
+    };
+    return stub;
+  }
+
+  it('hands the page text to the model in write mode', async () => {
+    const corrector = recordingCorrector();
+    const links = fakeLinks([{ url: 'https://example.com/a', title: 'A', text: 'ten days' }]);
+    const service = createFixService({ ...base, corrector, links });
+
+    await service.fix('linkedin post about https://example.com/a', 'write');
+
+    expect(links.calls).toBe(1);
+    expect(corrector.context).toContain('LINKED CONTENT');
+    expect(corrector.context).toContain('ten days');
+  });
+
+  it('reads no link in code or grammar mode', async () => {
+    // Those modes transform the selection in front of them. Fetching a URL they happen
+    // to contain would cost a round trip and leak where the user's text points.
+    const links = fakeLinks([]);
+    const service = createFixService({ ...base, corrector: recordingCorrector(), links });
+
+    await service.fix('see https://example.com/a', 'grammar');
+    await service.fix('// see https://example.com/a', 'code');
+
+    expect(links.calls).toBe(0);
+  });
+
+  it('sends no context when the page could not be read', async () => {
+    // The prompt then tells the model to write from the instruction alone rather than
+    // guess at what the page said, so `undefined` here is load-bearing.
+    const corrector = recordingCorrector();
+    const service = createFixService({ ...base, corrector, links: fakeLinks([]) });
+
+    await service.fix('post about https://dead.example/a', 'write');
+
+    expect(corrector.context).toBeUndefined();
+  });
+
+  it('still writes when link reading is switched off entirely', async () => {
+    const corrector = recordingCorrector();
+    const service = createFixService({ ...base, corrector, links: null });
+
+    const out = await service.fix('post about https://example.com/a', 'write');
+
+    expect(out.corrected).toBe('a written piece');
+    expect(corrector.context).toBeUndefined();
   });
 });

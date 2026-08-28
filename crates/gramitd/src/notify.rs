@@ -33,7 +33,9 @@ pub trait Notifier: Send + Sync {
 ///
 /// The mode decides the words. "Fixed 3 issues" is right for prose and wrong for code,
 /// where a word diff counts a renamed variable once per use; "Code updated" is right
-/// for code and says nothing to somebody correcting an email.
+/// for code and says nothing to somebody correcting an email. Write mode counts
+/// nothing at all: the whole selection was replaced by new text, so a diff against the
+/// brief measures the length of the answer rather than any amount of work done.
 pub fn notification_for(outcome: &FixOutcome, mode: Mode) -> Notification {
     match outcome {
         FixOutcome::Replaced { changes, .. } => Notification {
@@ -43,6 +45,7 @@ pub fn notification_for(outcome: &FixOutcome, mode: Mode) -> Notification {
                     0 | 1 => "Fixed 1 issue".to_string(),
                     n => format!("Fixed {n} issues"),
                 },
+                Mode::Write => "Written".to_string(),
             },
             // In code mode the count is detail rather than headline, because it
             // overstates small edits. In grammar mode the summary already carries it.
@@ -52,6 +55,7 @@ pub fn notification_for(outcome: &FixOutcome, mode: Mode) -> Notification {
                     n => format!("{n} edits pasted over your selection."),
                 }),
                 Mode::Grammar => None,
+                Mode::Write => Some("Pasted over your brief.".to_string()),
             },
             urgency: Urgency::Low,
         },
@@ -59,10 +63,14 @@ pub fn notification_for(outcome: &FixOutcome, mode: Mode) -> Notification {
             summary: match mode {
                 Mode::Code => "No changes needed".to_string(),
                 Mode::Grammar => "Looks good already".to_string(),
+                // Nothing came back but the brief itself, which is the one thing write
+                // mode is never supposed to return.
+                Mode::Write => "Nothing was written".to_string(),
             },
             body: Some(match mode {
                 Mode::Code => "The code already does what its comments ask for.".to_string(),
                 Mode::Grammar => "No changes needed.".to_string(),
+                Mode::Write => "The model gave back your brief unchanged. Try asking again.".to_string(),
             }),
             urgency: Urgency::Low,
         },
@@ -71,6 +79,7 @@ pub fn notification_for(outcome: &FixOutcome, mode: Mode) -> Notification {
             body: Some(match mode {
                 Mode::Code => "Select some code, then press the hotkey.".to_string(),
                 Mode::Grammar => "Select some text, then press the hotkey.".to_string(),
+                Mode::Write => "Select what you want written, then press the hotkey.".to_string(),
             }),
             urgency: Urgency::Normal,
         },
@@ -203,6 +212,29 @@ mod tests {
         assert_eq!(notification_for(&replaced(1), Mode::Grammar).summary, "Fixed 1 issue");
         assert_eq!(notification_for(&replaced(3), Mode::Grammar).summary, "Fixed 3 issues");
         assert_eq!(notification_for(&replaced(3), Mode::Grammar).body, None);
+    }
+
+    #[test]
+    fn write_mode_says_it_wrote_something_without_counting_edits() {
+        // Every word is new, so a diff count would only report how long the answer is.
+        let toast = notification_for(&replaced(37), Mode::Write);
+        assert_eq!(toast.summary, "Written");
+        assert_eq!(toast.body.as_deref(), Some("Pasted over your brief."));
+    }
+
+    #[test]
+    fn write_mode_treats_an_unchanged_selection_as_a_failure_to_write() {
+        // Getting the brief back is the one outcome write mode must never look happy
+        // about: the user's request is still sitting in their document.
+        let outcome = FixOutcome::AlreadyCorrect {
+            text: "write a mail to Ravi".into(),
+            model: "m".into(),
+            latency_ms: 1,
+            cached: false,
+        };
+        let toast = notification_for(&outcome, Mode::Write);
+        assert_eq!(toast.summary, "Nothing was written");
+        assert!(toast.body.unwrap().contains("brief unchanged"));
     }
 
     #[test]

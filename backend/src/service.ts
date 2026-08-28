@@ -1,5 +1,6 @@
 import { countChanges } from './diff.js';
 import { AppError } from './errors.js';
+import { renderLinkContext, type LinkReader } from './links.js';
 import type { Corrector } from './llm/azure.js';
 import type { Mode } from './prompt.js';
 
@@ -22,10 +23,12 @@ export interface FixServiceOptions {
   maxChars: number;
   missingAzureVars?: string[];
   now?: () => number;
+  /** Reads the pages a write instruction links to. null disables the feature. */
+  links?: LinkReader | null;
 }
 
 export function createFixService(options: FixServiceOptions): FixService {
-  const { corrector, maxChars, missingAzureVars = [], now = () => Date.now() } = options;
+  const { corrector, maxChars, missingAzureVars = [], now = () => Date.now(), links = null } = options;
 
   return {
     async fix(text: string, mode: Mode): Promise<FixOutcome> {
@@ -39,7 +42,13 @@ export function createFixService(options: FixServiceOptions): FixService {
 
       const started = now();
 
-      const { corrected, model } = await corrector.fix(text, mode);
+      // Only write mode uses a link: code and grammar mode transform the selection in
+      // front of them, so fetching a URL they happen to contain would cost a round
+      // trip and leak where the user's text points, for nothing.
+      const context =
+        mode === 'write' && links ? renderLinkContext(await links.read(text)) : null;
+
+      const { corrected, model } = await corrector.fix(text, mode, context ?? undefined);
       const changes = countChanges(text, corrected);
 
       return {

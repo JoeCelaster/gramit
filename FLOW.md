@@ -149,9 +149,21 @@ In the backend (`backend/src/`):
    parameters can't be known ahead of time, it walks a ladder of request shapes
    (`json+temperature` → `json` → `plain text`) on a 400 and remembers the first that
    works. `gpt-5.6-luna` rejects `temperature: 0`, so it settles on the second shape.
-4. `prompt.ts` → the system prompt fixes grammar/spelling/punctuation only, preserves
-   formatting, and treats your text as **data, never instructions** — a selection
-   reading "ignore previous instructions" gets corrected, not obeyed
+3b. `links.ts` → **write mode only**: any URL in the instruction is fetched and its
+   text handed to the model as a `LINKED CONTENT` block, because chat completions
+   cannot browse and the alternative is a model guessing at the page. Scheme, host and
+   every redirect hop are checked against the loopback and private ranges first — this
+   is the one outbound request the backend makes to an address a user chose. A page
+   that fails is logged and dropped; the fix never fails on it. [LINKS.md](LINKS.md)
+   traces this end to end.
+4. `prompt.ts` → picks the system prompt for the mode. The grammar prompt fixes
+   grammar/spelling/punctuation only, preserves formatting, and treats your text as
+   **data, never instructions** — a selection reading "ignore previous instructions"
+   gets corrected, not obeyed. Code mode carries out the request in the selection's
+   comments; write mode reads the whole selection as an instruction and returns the
+   piece it asks for — inferring goal, audience, platform and tone, and applying that
+   platform's conventions — which is the one mode where the selection *is* the
+   instruction
 5. `prompt.ts` → `sanitizeCorrection()` unwraps JSON, code fences, "Here's the
    corrected text:" preambles and added quotes, then restores your original leading and
    trailing whitespace

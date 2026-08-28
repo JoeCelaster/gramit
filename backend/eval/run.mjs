@@ -3,7 +3,7 @@
 //
 //   node backend/eval/run.mjs            # all cases
 //   node backend/eval/run.mjs tag        # only cases whose name matches "tag"
-//   node backend/eval/run.mjs grammar    # only the grammar-mode cases
+//   node backend/eval/run.mjs grammar    # only the grammar-mode cases (or code, write)
 //   node backend/eval/run.mjs --runs 3   # repeat each case (the model is non-deterministic)
 //
 // Spawns its own backend on a spare port, so the one you have running is untouched.
@@ -94,6 +94,14 @@ function check(testCase, output) {
   }
   if (testCase.endsWith && !output.trim().endsWith(testCase.endsWith)) {
     failures.push(`should end with ${JSON.stringify(testCase.endsWith)}`);
+  }
+  // Write mode is the only mode with an opinion about length: a brief that says "300
+  // words" is a requirement, and a two-line answer to it is a failure.
+  if (testCase.minWords !== undefined && words(output).length < testCase.minWords) {
+    failures.push(`only ${words(output).length} words, minimum ${testCase.minWords}`);
+  }
+  if (testCase.maxWords !== undefined && words(output).length > testCase.maxWords) {
+    failures.push(`${words(output).length} words, maximum ${testCase.maxWords}`);
   }
   if (testCase.maxAddedWords !== undefined) {
     const added = words(output).length - words(testCase.input).length;

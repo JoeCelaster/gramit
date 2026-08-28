@@ -10,7 +10,8 @@ export interface CorrectionResult {
 }
 
 export interface Corrector {
-  fix(text: string, mode: Mode): Promise<CorrectionResult>;
+  /** `context` is the LINKED CONTENT block, when write mode read a page. */
+  fix(text: string, mode: Mode, context?: string): Promise<CorrectionResult>;
 }
 
 /**
@@ -78,11 +79,20 @@ export function createAzureCorrector(config: AzureConfig, timeoutMs: number): Co
   // Index of the first strategy this deployment accepted; sticky across calls.
   let strategyIndex = 0;
 
-  async function callOnce(text: string, mode: Mode, strategy: Strategy): Promise<string> {
+  async function callOnce(
+    text: string,
+    mode: Mode,
+    strategy: Strategy,
+    context?: string,
+  ): Promise<string> {
     const response = await client.chat.completions.create({
       model: config.deployment,
       messages: [
         { role: 'system', content: systemPrompt(strategy.jsonMode, mode) },
+        // A separate system message, not appended to the user's text: the page is a
+        // stranger's writing, and the boundary is what stops it reading as the
+        // instruction. The prompt names this block and says it is reference only.
+        ...(context ? [{ role: 'system' as const, content: context }] : []),
         { role: 'user', content: text },
       ],
       ...(strategy.temperature ? { temperature: 0 } : {}),
@@ -100,13 +110,13 @@ export function createAzureCorrector(config: AzureConfig, timeoutMs: number): Co
   }
 
   return {
-    async fix(text: string, mode: Mode): Promise<CorrectionResult> {
+    async fix(text: string, mode: Mode, context?: string): Promise<CorrectionResult> {
       let lastError: unknown;
 
       for (let i = strategyIndex; i < STRATEGIES.length; i += 1) {
         const strategy = STRATEGIES[i]!;
         try {
-          const raw = await callOnce(text, mode, strategy);
+          const raw = await callOnce(text, mode, strategy, context);
           if (i !== strategyIndex) {
             log.info('adopted fallback request shape for deployment', {
               deployment: config.deployment,

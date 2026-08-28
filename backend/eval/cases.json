@@ -410,5 +410,187 @@
     ],
     "maxAddedWords": 1,
     "mode": "grammar"
+  },
+  {
+    "name": "brief: writes the leave email it was asked for",
+    "input": "write a mail to ravi regarding i am on leave on 28 aug",
+    "why": "The selection is a brief. It is replaced by the email, so the brief must not survive and every detail in it — the reader, the date, the reason — must appear.",
+    "matches": [
+      "^\\s*[Ss]ubject:",
+      "\\b[Rr]avi\\b",
+      "28(?:th)?\\s+(?:[Aa]ug|[Aa]ugust)|[Aa]ugust\\s+28"
+    ],
+    "forbid": [
+      "```",
+      "write a mail",
+      "Here's",
+      "Here is the"
+    ],
+    "forbidMatches": [
+      "^\\s*(?:Sure|Certainly|Of course)\\b"
+    ],
+    "mode": "write"
+  },
+  {
+    "name": "brief: an email is sendable, not a fragment",
+    "input": "mail to my manager asking for approval on the Q3 budget",
+    "why": "An email pasted into a compose window has to be usable as it stands: a subject, a greeting, a body and a sign-off.",
+    "matches": [
+      "^\\s*[Ss]ubject:",
+      "\\n\\s*(?:Hi|Hello|Dear)\\b",
+      "(?:[Rr]egards|[Tt]hanks|[Ss]incerely|[Bb]est)\\b"
+    ],
+    "forbid": [
+      "```",
+      "mail to my manager"
+    ],
+    "minWords": 25,
+    "mode": "write"
+  },
+  {
+    "name": "brief: honours a stated length",
+    "input": "essay on urbanisation in 150 words",
+    "why": "A stated length is the one instruction a brief gives that is trivially checkable. Answering it with three sentences is a failure.",
+    "matches": [
+      "[Uu]rbanis|[Uu]rbaniz"
+    ],
+    "forbid": [
+      "```",
+      "150 words",
+      "essay on urbanisation"
+    ],
+    "minWords": 110,
+    "maxWords": 230,
+    "mode": "write"
+  },
+  {
+    "name": "brief: a paragraph is one block, not a document",
+    "input": "write a paragraph about my school",
+    "why": "The form the brief names decides the shape. A paragraph asked for and a headed, bulleted page returned is unusable where it is pasted.",
+    "forbid": [
+      "```",
+      "write a paragraph"
+    ],
+    "forbidMatches": [
+      "\\n\\s*#",
+      "\\n\\s*[-*]\\s",
+      "\\n\\s*\\n"
+    ],
+    "minWords": 30,
+    "mode": "write"
+  },
+  {
+    "name": "brief: a chat message has no email furniture",
+    "input": "short whatsapp message to sam saying i will be 10 minutes late",
+    "why": "A message pasted into a chat box must not arrive with a subject line and a formal sign-off.",
+    "matches": [
+      "\\b[Ss]am\\b",
+      "\\b10\\b|\\b[Tt]en\\b"
+    ],
+    "forbidMatches": [
+      "^\\s*[Ss]ubject:",
+      "[Ss]incerely|[Bb]est regards|[Yy]ours truly"
+    ],
+    "maxWords": 45,
+    "mode": "write"
+  },
+  {
+    "name": "brief: keeps the material it was given",
+    "input": "turn these notes into a short report:\n- server moved to eu-west-1\n- downtime 12 minutes\n- no data lost",
+    "why": "A brief that carries material must have every fact of it survive. Dropping one silently loses something the user wrote by hand.",
+    "keepWords": [
+      "eu-west-1",
+      "12"
+    ],
+    "forbid": [
+      "```",
+      "turn these notes"
+    ],
+    "mode": "write"
+  },
+  {
+    "name": "brief: marks a missing detail instead of inventing one",
+    "input": "write a leave application to the principal for 2 days of sick leave",
+    "why": "The brief gives no name and no dates. A bracketed placeholder is fixable at a glance; an invented one is a wrong document the user may send.",
+    "matches": [
+      "[Pp]rincipal\\b",
+      "\\[[^\\]\\n]{2,30}\\]"
+    ],
+    "forbid": [
+      "```",
+      "write a leave application"
+    ],
+    "mode": "write"
+  },
+  {
+    "name": "brief: never hands the brief back corrected",
+    "input": "write a assignment brief for a react todo app",
+    "why": "The brief has a grammar error in it ('a assignment'). Correcting it and returning it is grammar mode's answer, and is exactly the failure write mode has to avoid.",
+    "matches": [
+      "[Rr]eact",
+      "[Tt]odo|[Tt]o-do"
+    ],
+    "forbid": [
+      "```",
+      "an assignment brief for a react todo app",
+      "write a assignment brief"
+    ],
+    "minWords": 40,
+    "mode": "write"
+  },
+  {
+    "name": "brief: writes a LinkedIn post like a LinkedIn post",
+    "input": "linkedin post about how we cut our build time from 40 mins to 6 mins by caching docker layers. i am proud of the team",
+    "why": "The platform is named, so its conventions are the job: a hook, short paragraphs with air between them, and a close that invites a reply. A dense block of prose is the failure.",
+    "matches": [
+      "\\n\\s*\\n",
+      "40",
+      "6"
+    ],
+    "forbid": [
+      "```",
+      "linkedin post about",
+      "Here's",
+      "In today's"
+    ],
+    "forbidMatches": [
+      "^\\s*(?:Sure|Certainly)\\b",
+      "(#\\w+[\\s,]*){4,}"
+    ],
+    "minWords": 60,
+    "maxWords": 260,
+    "mode": "write"
+  },
+  {
+    "name": "brief: reads the tone the user wants, not the tone they used",
+    "input": "angry mail to my landlord, the heater has been broken for 2 weeks and nobody replied. keep it professional",
+    "why": "The instruction carries the emotion and the constraint separately. The piece has to be firm about the two weeks without becoming the insult the user was tempted by.",
+    "matches": [
+      "^\\s*[Ss]ubject:",
+      "(?:two|2)\\s+weeks",
+      "[Hh]eater"
+    ],
+    "forbid": [
+      "```",
+      "angry mail",
+      "ridiculous",
+      "unacceptable behaviour of you",
+      "idiot"
+    ],
+    "minWords": 50,
+    "mode": "write"
+  },
+  {
+    "name": "brief: keeps the phrase the user clearly cares about",
+    "input": "post announcing our app is live. we call it 'built by two people in a garage' - keep that line",
+    "why": "Improving the writing must not mean overwriting the writer. A phrase they asked to keep is the clearest case of the voice that has to survive.",
+    "contains": [
+      "built by two people in a garage"
+    ],
+    "forbid": [
+      "```",
+      "post announcing"
+    ],
+    "mode": "write"
   }
 ]

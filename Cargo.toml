@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/gramit-cli", "crates/gramit-core", "crates/gramit-input", "crates/gramitd"]
 
 [workspace.package]
-version = "0.2.1"
+version = "1.0.0"
 edition = "2021"
 rust-version = "1.82"
 license = "MIT"

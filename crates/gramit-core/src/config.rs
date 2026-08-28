@@ -67,28 +67,39 @@ impl std::fmt::Display for Capture {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Mode {
+    
+    /// Grammar, spelling, punctuation only — preserves the author's voice.
+    ///
+    /// The default, because it is the safe one to press a hotkey on by accident: it
+    /// only ever repairs what is already there. Code and write mode both replace the
+    /// selection with something new, so they are opted into rather than landed on.
+    #[default]
+    Grammar,
+    /// Read the selection as a brief — "write a mail to Ravi saying I am on leave on
+    /// 28 Aug", "essay on urbanisation, 300 words" — and replace it with the finished
+    /// piece: an email, an essay, a paragraph, an assignment brief, whatever was asked
+    /// for. Nothing of the brief survives; it is carried out, not corrected.
+    Write,
     /// Read the selection together with any request written in its comments, and give
     /// back code: the same block carried out, or a whole program when the selection is
     /// only a request like "Write Java code for two sum".
     Code,
-    /// Grammar, spelling, punctuation only — preserves the author's voice.
-    ///
-    /// The default, because it is the safe one to press a hotkey on by accident: it
-    /// only ever repairs what is already there. Code mode rewrites, so it is opted
-    /// into rather than landed on.
-    #[default]
-    Grammar,
 }
 
 impl Mode {
     /// Every mode, in the order they are offered at the prompt.
-    pub const ALL: [Mode; 2] = [Mode::Code, Mode::Grammar];
+    ///
+    /// Grammar first because it is the default and the safe one; write next, because
+    /// it is what most people reach for after it; code last, since it is the one you
+    /// go looking for on purpose.
+    pub const ALL: [Mode; 3] = [Mode::Grammar, Mode::Write, Mode::Code];
 
     /// One line of help, for the mode prompt and `gramit mode` with no argument.
     pub fn summary(&self) -> &'static str {
         match self {
-            Mode::Code => "write and fix code — comments in the selection are the request",
             Mode::Grammar => "fix grammar, spelling and punctuation — wording is left alone",
+            Mode::Write => "write what you ask for — the selection is the brief, not the text",
+            Mode::Code => "write and fix code — comments in the selection are the request",
         }
     }
 }
@@ -98,8 +109,9 @@ impl std::fmt::Display for Mode {
         // `f.pad` rather than `write!`, so `{mode:<8}` lines the mode menu up into
         // columns. A plain `write!` silently ignores width and alignment.
         f.pad(match self {
-            Mode::Code => "code",
             Mode::Grammar => "grammar",
+            Mode::Write => "write",
+            Mode::Code => "code",
         })
     }
 }
@@ -109,9 +121,10 @@ impl std::str::FromStr for Mode {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.trim().to_ascii_lowercase().as_str() {
-            "code" | "c" => Ok(Mode::Code),
             "grammar" | "g" | "text" => Ok(Mode::Grammar),
-            other => Err(format!("unknown mode {other:?} (expected: code or grammar)")),
+            "write" | "w" | "compose" => Ok(Mode::Write),
+            "code" | "c" => Ok(Mode::Code),
+            other => Err(format!("unknown mode {other:?} (expected: code, grammar or write)")),
         }
     }
 }
@@ -398,6 +411,8 @@ mod tests {
         assert_eq!(" CODE ".parse::<Mode>().unwrap(), Mode::Code);
         assert_eq!("grammar".parse::<Mode>().unwrap(), Mode::Grammar);
         assert_eq!(" GRAMMAR ".parse::<Mode>().unwrap(), Mode::Grammar);
+        assert_eq!("write".parse::<Mode>().unwrap(), Mode::Write);
+        assert_eq!(" WRITE ".parse::<Mode>().unwrap(), Mode::Write);
         assert!("sarcastic".parse::<Mode>().is_err());
     }
 
@@ -406,13 +421,15 @@ mod tests {
         // The mode prompt prints a padded column; `write!` would drop the padding.
         assert_eq!(format!("[{:<8}]", Mode::Code), "[code    ]");
         assert_eq!(format!("{}", Mode::Grammar), "grammar");
+        assert_eq!(format!("[{:<8}]", Mode::Write), "[write   ]");
     }
 
     #[test]
     fn mode_accepts_a_single_letter() {
-        // The mode prompt shows "[c/g]", so those two answers have to work.
+        // The mode prompt shows every mode's name, so its first letter has to work.
         assert_eq!("c".parse::<Mode>().unwrap(), Mode::Code);
         assert_eq!("g".parse::<Mode>().unwrap(), Mode::Grammar);
+        assert_eq!("w".parse::<Mode>().unwrap(), Mode::Write);
     }
 
     #[test]

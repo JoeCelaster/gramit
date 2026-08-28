@@ -22,3 +22,6 @@ clap = { version = "4", features = ["derive"] }
 crossterm.workspace = true
 interprocess = { version = "2.4", features = ["tokio"] }
 notify-rust = "4"
+# The updater asks GitHub for the latest release and downloads the install script.
+# Same features as gramit-core's client, so this adds no new dependency tree.
+reqwest = { version = "0.13.3", default-features = false, features = ["json", "rustls"] }

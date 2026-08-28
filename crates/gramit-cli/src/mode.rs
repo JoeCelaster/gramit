@@ -253,8 +253,9 @@ mod tests {
 
     #[test]
     fn the_menu_numbers_match_what_was_printed() {
-        assert_eq!(parse_answer("1").unwrap(), Some(Mode::Code));
-        assert_eq!(parse_answer("2").unwrap(), Some(Mode::Grammar));
+        assert_eq!(parse_answer("1").unwrap(), Some(Mode::Grammar));
+        assert_eq!(parse_answer("2").unwrap(), Some(Mode::Write));
+        assert_eq!(parse_answer("3").unwrap(), Some(Mode::Code));
     }
 
     #[test]
@@ -262,13 +263,15 @@ mod tests {
         assert_eq!(parse_answer("code").unwrap(), Some(Mode::Code));
         assert_eq!(parse_answer(" GRAMMAR \n").unwrap(), Some(Mode::Grammar));
         assert_eq!(parse_answer("g").unwrap(), Some(Mode::Grammar));
+        assert_eq!(parse_answer("write").unwrap(), Some(Mode::Write));
+        assert_eq!(parse_answer("w").unwrap(), Some(Mode::Write));
     }
 
     #[test]
     fn an_answer_that_is_not_a_mode_is_an_error() {
         // Silently falling back would start the daemon in a mode the user did not pick.
         assert!(parse_answer("0").is_err());
-        assert!(parse_answer("3").is_err());
+        assert!(parse_answer("4").is_err());
         assert!(parse_answer("sarcastic").is_err());
     }
 }

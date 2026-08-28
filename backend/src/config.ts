@@ -11,6 +11,15 @@ export interface AzureConfig {
   seed: number | null;
 }
 
+export interface LinkConfig {
+  /** Off means write mode ignores URLs entirely — no outbound request is ever made. */
+  enabled: boolean;
+  timeoutMs: number;
+  maxBytes: number;
+  maxChars: number;
+  maxLinks: number;
+}
+
 export interface Config {
   host: string;
   port: number;
@@ -21,6 +30,8 @@ export interface Config {
   missingAzureVars: string[];
   maxChars: number;
   upstreamTimeoutMs: number;
+  /** How write mode reads the pages an instruction links to. */
+  links: LinkConfig;
 }
 
 const AZURE_VARS = [
@@ -65,6 +76,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     missingAzureVars: [...missingAzureVars],
     maxChars: intFromEnv('MAX_CHARS', 25_000),
     upstreamTimeoutMs: intFromEnv('UPSTREAM_TIMEOUT_MS', 30_000),
+    links: {
+      // On by default: a link in a write instruction is there to be used, and a fix
+      // that silently ignored it would invent what the page said instead.
+      enabled: (env.LINK_FETCH ?? 'on').trim().toLowerCase() !== 'off',
+      // Short, because it is spent before the model is even called and the user is
+      // watching a hotkey. A slow page is dropped rather than allowed to add seconds.
+      timeoutMs: intFromEnv('LINK_TIMEOUT_MS', 6_000),
+      maxBytes: intFromEnv('LINK_MAX_BYTES', 1_500_000),
+      maxChars: intFromEnv('LINK_MAX_CHARS', 6_000),
+      maxLinks: intFromEnv('LINK_MAX_LINKS', 3),
+    },
   };
 }
 

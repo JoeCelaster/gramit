@@ -58,10 +58,45 @@ pub struct BackendClient {
     timeout_ms: u64,
 }
 
+/// How the transport failed, in the terms the user's notification is written in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Transport {
+    Unreachable,
+    Timeout,
+    BadResponse,
+}
+
+/// Which of the three a reqwest error is.
+///
+/// `is_connect` is checked before `is_timeout` because a connect that times out is
+/// both, and "the backend is not running" is the more useful of the two things to tell
+/// someone: they can start it. A timeout means the backend answered the phone and then
+/// took too long, which is a different problem with a different remedy.
+fn classify_transport(is_connect: bool, is_timeout: bool, is_decode: bool) -> Transport {
+    if is_connect {
+        Transport::Unreachable
+    } else if is_timeout {
+        Transport::Timeout
+    } else if is_decode {
+        Transport::BadResponse
+    } else {
+        Transport::Unreachable
+    }
+}
+
 impl BackendClient {
     pub fn new(base_url: &str, timeout: Duration) -> Result<Self, BackendError> {
+        // A separate, shorter budget for getting the connection open at all. Without
+        // one, a host that never answers — a stopped backend on Windows, which drops
+        // the SYN instead of refusing it — spends the whole request timeout and is
+        // then reported as "timed out" rather than "not running". Half the budget, so
+        // it always fires first, capped so a generous request timeout does not mean
+        // waiting a minute to learn nothing is listening.
+        let connect_timeout = (timeout / 2).min(Duration::from_secs(5));
+
         let http = reqwest::Client::builder()
             .timeout(timeout)
+            .connect_timeout(connect_timeout)
             .build()
             .map_err(|err| BackendError::new("CLIENT_INIT", format!("HTTP client: {err}"), false))?;
 
@@ -108,14 +143,10 @@ impl BackendClient {
     }
 
     fn transport_error(&self, err: reqwest::Error) -> BackendError {
-        if err.is_timeout() {
-            BackendError::timeout(self.timeout_ms)
-        } else if err.is_connect() {
-            BackendError::unreachable(&self.base_url, err)
-        } else if err.is_decode() {
-            BackendError::bad_response(err)
-        } else {
-            BackendError::unreachable(&self.base_url, err)
+        match classify_transport(err.is_connect(), err.is_timeout(), err.is_decode()) {
+            Transport::Unreachable => BackendError::unreachable(&self.base_url, err),
+            Transport::Timeout => BackendError::timeout(self.timeout_ms),
+            Transport::BadResponse => BackendError::bad_response(err),
         }
     }
 
@@ -179,4 +210,58 @@ mod tests {
         let body = FixRequestBody { text: "he go", mode: Mode::Code };
         assert_eq!(serde_json::to_string(&body).unwrap(), r#"{"text":"he go","mode":"code"}"#);
     }
+
+    #[test]
+    fn a_connect_that_times_out_is_unreachable_not_a_timeout() {
+        // The Windows CI failure this exists to prevent. A refused connection (Linux,
+        // macOS) is a plain connect error; a dropped SYN (Windows, and any firewall
+        // that blackholes) is a connect error *and* a timeout, because the connect
+        // budget is what ran out. Both mean the same thing to the user: nothing is
+        // listening. Reading them differently made the same test pass on one platform
+        // and fail on another.
+        assert_eq!(classify_transport(true, false, false), Transport::Unreachable);
+        assert_eq!(classify_transport(true, true, false), Transport::Unreachable);
+    }
+
+    #[test]
+    fn a_slow_backend_is_still_a_timeout() {
+        // Connected, then took too long: a different problem with a different remedy,
+        // so it must not be swallowed by the rule above.
+        assert_eq!(classify_transport(false, true, false), Transport::Timeout);
+    }
+
+    #[test]
+    fn an_unreadable_body_and_an_unknown_failure_keep_their_meanings() {
+        assert_eq!(classify_transport(false, false, true), Transport::BadResponse);
+        // Nothing else to go on: "unreachable" is the honest, actionable guess.
+        assert_eq!(classify_transport(false, false, false), Transport::Unreachable);
+    }
+
+    #[test]
+    fn the_connect_budget_always_expires_before_the_request_budget() {
+        // If they were equal the two could race, and the classification above would
+        // come down to which timer the OS fired first.
+        for ms in [200_u64, 500, 15_000, 60_000] {
+            let timeout = Duration::from_millis(ms);
+            let connect = (timeout / 2).min(Duration::from_secs(5));
+            assert!(connect < timeout, "connect budget must be shorter for {ms}ms");
+        }
+    }
+
+    #[test]
+    fn every_mode_goes_on_the_wire_as_the_backend_spells_it() {
+        // The backend rejects any mode outside its own list, so a name that differs by
+        // a letter is a 400 on every fix in that mode.
+        for (mode, expected) in [
+            (Mode::Code, "code"),
+            (Mode::Grammar, "grammar"),
+            (Mode::Write, "write"),
+        ] {
+            let body = FixRequestBody { text: "x", mode };
+            let json = serde_json::to_string(&body).unwrap();
+            assert_eq!(json, format!(r#"{{"text":"x","mode":"{expected}"}}"#));
+        }
+    }
 }
+
+
