@@ -7,21 +7,11 @@ use gramit_core::ipc::{self, Request, Response};
 use gramit_core::paths::{self, Endpoint};
 use interprocess::local_socket::tokio::prelude::*;
 use interprocess::local_socket::tokio::Stream;
-use interprocess::local_socket::{GenericFilePath, GenericNamespaced, Name};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
-fn to_name(endpoint: &Endpoint) -> Result<Name<'static>> {
-    match endpoint {
-        Endpoint::Path(path) => path
-            .clone()
-            .into_os_string()
-            .to_fs_name::<GenericFilePath>()
-            .with_context(|| format!("invalid socket path {}", path.display())),
-        Endpoint::Namespaced(name) => name
-            .clone()
-            .to_ns_name::<GenericNamespaced>()
-            .with_context(|| format!("invalid socket name {name}")),
-    }
+/// The CLI's half of the name the daemon binds. Both go through `paths::to_name`.
+fn to_name(endpoint: &Endpoint) -> Result<interprocess::local_socket::Name<'static>> {
+    paths::to_name(endpoint).with_context(|| format!("invalid socket {endpoint}"))
 }
 
 /// Sends one request and returns the daemon's reply.

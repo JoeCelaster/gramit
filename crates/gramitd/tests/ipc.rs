@@ -7,15 +7,21 @@ use std::process::{Child, Command};
 use std::time::{Duration, Instant};
 
 use gramit_core::ipc::{self, Request, Response};
+use gramit_core::paths::{self, Endpoint};
 use interprocess::local_socket::tokio::prelude::*;
 use interprocess::local_socket::tokio::Stream;
-use interprocess::local_socket::{GenericFilePath, Name};
+use interprocess::local_socket::Name;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 /// Kills the daemon even when a test fails partway through.
 struct DaemonGuard {
     child: Child,
-    socket: std::path::PathBuf,
+    /// Where the daemon is listening, in whatever form this platform uses: a socket
+    /// file on Unix, a named pipe on Windows.
+    endpoint: Endpoint,
+    /// The temp directory holding the config and log, which is not where the socket
+    /// lives on Windows.
+    dir: std::path::PathBuf,
     _dir: tempfile::TempDir,
 }
 
@@ -26,8 +32,18 @@ impl Drop for DaemonGuard {
     }
 }
 
-fn socket_name(path: &std::path::Path) -> Name<'static> {
-    path.to_path_buf().into_os_string().to_fs_name::<GenericFilePath>().unwrap()
+/// The same conversion the daemon and the CLI use. Building the name here by hand is
+/// what made every one of these tests fail on Windows: they asked for a filesystem
+/// socket while the daemon was opening a named pipe.
+fn socket_name(endpoint: &Endpoint) -> Name<'static> {
+    paths::to_name(endpoint).expect("socket name")
+}
+
+/// A unique label per daemon, so tests running in parallel never share a pipe name.
+fn next_label(prefix: &str) -> String {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static COUNTER: AtomicUsize = AtomicUsize::new(0);
+    format!("{prefix}-{}.sock", COUNTER.fetch_add(1, Ordering::Relaxed))
 }
 
 /// Starts a daemon in an isolated temp dir, pointed at a backend port nothing listens
@@ -40,7 +56,7 @@ async fn start_daemon() -> DaemonGuard {
 /// setting — notably by leaving `backend_url` out entirely.
 async fn start_daemon_with(extra: &str) -> DaemonGuard {
     let dir = tempfile::tempdir().expect("temp dir");
-    let socket = dir.path().join("gramit.sock");
+    let endpoint = Endpoint::for_test(dir.path(), &next_label("gramit"));
     let config_path = dir.path().join("config.toml");
 
     let mut config = std::fs::File::create(&config_path).expect("config file");
@@ -57,7 +73,7 @@ async fn start_daemon_with(extra: &str) -> DaemonGuard {
     drop(config);
 
     let child = Command::new(env!("CARGO_BIN_EXE_gramitd"))
-        .env("GRAMIT_SOCKET", &socket)
+        .env("GRAMIT_SOCKET", endpoint.as_env_value())
         .env("GRAMIT_CONFIG", &config_path)
         // The daemon honours this at run time, so a developer who has it exported
         // would otherwise silently change what these tests are asserting about.
@@ -66,21 +82,26 @@ async fn start_daemon_with(extra: &str) -> DaemonGuard {
         .spawn()
         .expect("spawn gramitd");
 
-    let guard = DaemonGuard { child, socket: socket.clone(), _dir: dir };
+    let guard = DaemonGuard {
+        child,
+        endpoint: endpoint.clone(),
+        dir: dir.path().to_path_buf(),
+        _dir: dir,
+    };
 
     let deadline = Instant::now() + Duration::from_secs(10);
     while Instant::now() < deadline {
-        if Stream::connect(socket_name(&socket)).await.is_ok() {
+        if Stream::connect(socket_name(&endpoint)).await.is_ok() {
             return guard;
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
-    panic!("gramitd did not start listening on {}", socket.display());
+    panic!("gramitd did not start listening on {endpoint}");
 }
 
 /// Sends requests on one connection and returns the responses in order.
-async fn round_trip(socket: &std::path::Path, requests: &[Request]) -> Vec<Response> {
-    let stream = Stream::connect(socket_name(socket)).await.expect("connect");
+async fn round_trip(endpoint: &Endpoint, requests: &[Request]) -> Vec<Response> {
+    let stream = Stream::connect(socket_name(endpoint)).await.expect("connect");
     let (recv, mut send) = stream.split();
     let mut reader = BufReader::new(recv);
     let mut responses = Vec::new();
@@ -97,8 +118,8 @@ async fn round_trip(socket: &std::path::Path, requests: &[Request]) -> Vec<Respo
     responses
 }
 
-async fn send_raw(socket: &std::path::Path, raw: &str) -> Response {
-    let stream = Stream::connect(socket_name(socket)).await.expect("connect");
+async fn send_raw(endpoint: &Endpoint, raw: &str) -> Response {
+    let stream = Stream::connect(socket_name(endpoint)).await.expect("connect");
     let (recv, mut send) = stream.split();
     let mut reader = BufReader::new(recv);
 
@@ -113,7 +134,7 @@ async fn send_raw(socket: &std::path::Path, raw: &str) -> Response {
 #[tokio::test]
 async fn ping_returns_the_daemon_pid_and_version() {
     let daemon = start_daemon().await;
-    let responses = round_trip(&daemon.socket, &[Request::Ping]).await;
+    let responses = round_trip(&daemon.endpoint, &[Request::Ping]).await;
 
     match &responses[0] {
         Response::Pong { version, pid, .. } => {
@@ -127,7 +148,7 @@ async fn ping_returns_the_daemon_pid_and_version() {
 #[tokio::test]
 async fn one_connection_carries_several_requests() {
     let daemon = start_daemon().await;
-    let responses = round_trip(&daemon.socket, &[Request::Ping, Request::Ping, Request::Status]).await;
+    let responses = round_trip(&daemon.endpoint, &[Request::Ping, Request::Ping, Request::Status]).await;
 
     assert_eq!(responses.len(), 3);
     assert!(matches!(responses[0], Response::Pong { .. }));
@@ -141,7 +162,7 @@ async fn one_connection_carries_several_requests() {
 async fn an_unconfigured_daemon_still_starts_and_refuses_to_fix() {
     let daemon = start_daemon_with("").await;
     let responses = round_trip(
-        &daemon.socket,
+        &daemon.endpoint,
         &[Request::Status, Request::Fix { text: "he go".into(), mode: Default::default() }],
     )
     .await;
@@ -166,7 +187,7 @@ async fn an_unconfigured_daemon_still_starts_and_refuses_to_fix() {
 #[tokio::test]
 async fn status_reports_config_and_an_unreachable_backend() {
     let daemon = start_daemon().await;
-    let responses = round_trip(&daemon.socket, &[Request::Status]).await;
+    let responses = round_trip(&daemon.endpoint, &[Request::Status]).await;
 
     match &responses[0] {
         Response::Status(report) => {
@@ -184,7 +205,7 @@ async fn status_reports_config_and_an_unreachable_backend() {
 async fn fix_surfaces_the_backend_error_code() {
     let daemon = start_daemon().await;
     let request = Request::Fix { text: "he go".into(), mode: Default::default() };
-    let responses = round_trip(&daemon.socket, &[request]).await;
+    let responses = round_trip(&daemon.endpoint, &[request]).await;
 
     match &responses[0] {
         Response::Error { code, retryable, .. } => {
@@ -200,7 +221,7 @@ async fn fix_enforces_the_configured_character_limit() {
     let daemon = start_daemon().await;
     // The test config sets max_chars = 20.
     let request = Request::Fix { text: "a".repeat(21), mode: Default::default() };
-    let responses = round_trip(&daemon.socket, &[request]).await;
+    let responses = round_trip(&daemon.endpoint, &[request]).await;
 
     match &responses[0] {
         Response::Error { code, .. } => assert_eq!(code, "TOO_LONG"),
@@ -212,13 +233,13 @@ async fn fix_enforces_the_configured_character_limit() {
 async fn malformed_input_gets_an_error_not_a_dropped_connection() {
     let daemon = start_daemon().await;
 
-    match send_raw(&daemon.socket, "this is not json\n").await {
+    match send_raw(&daemon.endpoint, "this is not json\n").await {
         Response::Error { code, .. } => assert_eq!(code, "BAD_REQUEST"),
         other => panic!("expected an error, got {other:?}"),
     }
 
     // The daemon must still be healthy afterwards.
-    let responses = round_trip(&daemon.socket, &[Request::Ping]).await;
+    let responses = round_trip(&daemon.endpoint, &[Request::Ping]).await;
     assert!(matches!(responses[0], Response::Pong { .. }));
 }
 
@@ -227,9 +248,9 @@ async fn a_second_daemon_refuses_to_start_on_a_live_socket() {
     let daemon = start_daemon().await;
 
     let output = Command::new(env!("CARGO_BIN_EXE_gramitd"))
-        .env("GRAMIT_SOCKET", &daemon.socket)
-        .env("GRAMIT_CONFIG", daemon.socket.with_file_name("config.toml"))
-        .env("GRAMIT_LOG", daemon.socket.with_file_name("second.log"))
+        .env("GRAMIT_SOCKET", daemon.endpoint.as_env_value())
+        .env("GRAMIT_CONFIG", daemon.dir.join("config.toml"))
+        .env("GRAMIT_LOG", daemon.dir.join("second.log"))
         .output()
         .expect("run second gramitd");
 
@@ -238,25 +259,34 @@ async fn a_second_daemon_refuses_to_start_on_a_live_socket() {
     assert!(stderr.contains("already running"), "unexpected stderr: {stderr}");
 }
 
+/// Unix only: a named pipe lives in its own namespace and leaves no file behind, so
+/// there is no such thing as a stale one to clean up on Windows.
+#[cfg(unix)]
 #[tokio::test]
 async fn a_stale_socket_file_does_not_block_startup() {
     let dir = tempfile::tempdir().expect("temp dir");
-    let socket = dir.path().join("stale.sock");
+    let endpoint = Endpoint::for_test(dir.path(), &next_label("stale"));
+    let socket = endpoint.socket_file().expect("unix endpoints have a file").to_path_buf();
     // A leftover file where the socket belongs, with nothing listening on it.
     std::fs::write(&socket, b"leftover").expect("write stale socket");
 
     let child = Command::new(env!("CARGO_BIN_EXE_gramitd"))
-        .env("GRAMIT_SOCKET", &socket)
+        .env("GRAMIT_SOCKET", endpoint.as_env_value())
         .env("GRAMIT_CONFIG", dir.path().join("missing.toml"))
         .env("GRAMIT_LOG", dir.path().join("gramitd.log"))
         .spawn()
         .expect("spawn gramitd");
-    let guard = DaemonGuard { child, socket: socket.clone(), _dir: dir };
+    let guard = DaemonGuard {
+        child,
+        endpoint: endpoint.clone(),
+        dir: dir.path().to_path_buf(),
+        _dir: dir,
+    };
 
     let deadline = Instant::now() + Duration::from_secs(10);
     let mut connected = false;
     while Instant::now() < deadline {
-        if Stream::connect(socket_name(&socket)).await.is_ok() {
+        if Stream::connect(socket_name(&endpoint)).await.is_ok() {
             connected = true;
             break;
         }
@@ -270,7 +300,7 @@ async fn a_stale_socket_file_does_not_block_startup() {
 #[tokio::test]
 async fn shutdown_stops_the_daemon_and_removes_the_socket() {
     let mut daemon = start_daemon().await;
-    let responses = round_trip(&daemon.socket, &[Request::Shutdown]).await;
+    let responses = round_trip(&daemon.endpoint, &[Request::Shutdown]).await;
     assert_eq!(responses[0], Response::Ok);
 
     let deadline = Instant::now() + Duration::from_secs(10);
@@ -284,5 +314,9 @@ async fn shutdown_stops_the_daemon_and_removes_the_socket() {
     }
 
     assert!(exited, "gramitd should exit after a shutdown request");
-    assert!(!daemon.socket.exists(), "the socket file should be cleaned up on shutdown");
+    // Only Unix has a file to clean up; a named pipe disappears with the process that
+    // owns it. The exit above is the part that matters on both.
+    if let Some(file) = daemon.endpoint.socket_file() {
+        assert!(!file.exists(), "the socket file should be cleaned up on shutdown");
+    }
 }

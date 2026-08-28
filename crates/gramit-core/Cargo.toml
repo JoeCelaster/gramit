@@ -8,6 +8,10 @@ description = "Shared config, IPC protocol, and backend client for gramit"
 
 [dependencies]
 directories = "6.0.0"
+# Only for `paths::to_name`, which turns an Endpoint into the socket name the daemon,
+# the CLI and the integration tests all have to agree on. Both binaries already depend
+# on this crate, so it adds nothing to the tree.
+interprocess = { version = "2.4", features = ["tokio"] }
 # rustls, not the system OpenSSL: the backend is reached over https and the binary
 # should not need a matching libssl on the user's machine to talk to it.
 reqwest = { version = "0.13.3", default-features = false, features = ["json", "rustls"] }

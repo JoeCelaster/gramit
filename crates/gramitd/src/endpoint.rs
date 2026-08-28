@@ -4,23 +4,15 @@
 use std::time::Duration;
 
 use anyhow::{anyhow, Context, Result};
-use gramit_core::paths::Endpoint;
+use gramit_core::paths::{self, Endpoint};
 use interprocess::local_socket::tokio::{prelude::*, Listener, Stream};
-use interprocess::local_socket::{GenericFilePath, GenericNamespaced, ListenerOptions, Name};
+use interprocess::local_socket::{ListenerOptions, Name};
 use tracing::{debug, warn};
 
+/// The daemon's half of the name the CLI connects to. Both go through
+/// `paths::to_name`, so the two can never disagree about what a socket is called.
 pub fn to_name(endpoint: &Endpoint) -> Result<Name<'static>> {
-    match endpoint {
-        Endpoint::Path(path) => path
-            .clone()
-            .into_os_string()
-            .to_fs_name::<GenericFilePath>()
-            .with_context(|| format!("invalid socket path {}", path.display())),
-        Endpoint::Namespaced(name) => name
-            .clone()
-            .to_ns_name::<GenericNamespaced>()
-            .with_context(|| format!("invalid socket name {name}")),
-    }
+    paths::to_name(endpoint).with_context(|| format!("invalid socket {endpoint}"))
 }
 
 /// True if something is already accepting connections at `endpoint`.

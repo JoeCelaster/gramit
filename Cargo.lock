@@ -908,6 +908,7 @@ name = "gramit-core"
 version = "1.0.0"
 dependencies = [
  "directories",
+ "interprocess",
  "reqwest",
  "serde",
  "serde_json",

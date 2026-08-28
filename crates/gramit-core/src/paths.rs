@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use directories::ProjectDirs;
+use interprocess::local_socket::{GenericFilePath, GenericNamespaced, Name, ToFsName, ToNsName};
 
 use crate::error::ConfigError;
 
@@ -20,6 +21,60 @@ impl std::fmt::Display for Endpoint {
             Endpoint::Path(path) => write!(f, "{}", path.display()),
             Endpoint::Namespaced(name) => write!(f, "{name}"),
         }
+    }
+}
+
+impl Endpoint {
+    /// A test endpoint that means the same thing on every platform: an isolated
+    /// socket under `dir` on Unix, a uniquely named pipe on Windows.
+    ///
+    /// Here rather than in the test file because a test that builds the name its own
+    /// way stops testing what the daemon does — which is exactly how the Windows CI
+    /// failure got in: the tests asked for a filesystem socket at `C:\...\gramit.sock`
+    /// while the daemon was opening a named pipe.
+    pub fn for_test(dir: &std::path::Path, label: &str) -> Self {
+        #[cfg(windows)]
+        {
+            let _ = dir;
+            // A pipe name may not contain a path separator, so the temp directory
+            // cannot be part of it. The pid plus the label is what keeps two tests
+            // running at once out of each other's way.
+            Endpoint::Namespaced(format!("gramit-test-{}-{label}", std::process::id()))
+        }
+        #[cfg(not(windows))]
+        {
+            Endpoint::Path(dir.join(label))
+        }
+    }
+
+    /// What to put in `GRAMIT_SOCKET` for a daemon to land on this endpoint.
+    pub fn as_env_value(&self) -> std::ffi::OsString {
+        match self {
+            Endpoint::Path(path) => path.clone().into_os_string(),
+            Endpoint::Namespaced(name) => std::ffi::OsString::from(name),
+        }
+    }
+
+    /// The socket file, when there is one. Named pipes have no file, so cleaning up
+    /// after one — or finding a stale one — is a Unix-only concern.
+    pub fn socket_file(&self) -> Option<&std::path::Path> {
+        match self {
+            Endpoint::Path(path) => Some(path.as_path()),
+            Endpoint::Namespaced(_) => None,
+        }
+    }
+}
+
+/// Turns an endpoint into the name `interprocess` binds and connects with.
+///
+/// The one implementation, used by the daemon, the CLI and the integration tests. The
+/// two sides of a socket have to agree on the name exactly, and on Windows the two
+/// forms are not interchangeable: a filesystem name has to be a `\\.\pipe\...` path,
+/// while an ordinary name goes through the namespaced form instead.
+pub fn to_name(endpoint: &Endpoint) -> std::io::Result<Name<'static>> {
+    match endpoint {
+        Endpoint::Path(path) => path.clone().into_os_string().to_fs_name::<GenericFilePath>(),
+        Endpoint::Namespaced(name) => name.clone().to_ns_name::<GenericNamespaced>(),
     }
 }
 
