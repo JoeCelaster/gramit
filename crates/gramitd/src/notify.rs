@@ -33,9 +33,9 @@ pub trait Notifier: Send + Sync {
 ///
 /// The mode decides the words. "Fixed 3 issues" is right for prose and wrong for code,
 /// where a word diff counts a renamed variable once per use; "Code updated" is right
-/// for code and says nothing to somebody correcting an email. Write mode counts
-/// nothing at all: the whole selection was replaced by new text, so a diff against the
-/// brief measures the length of the answer rather than any amount of work done.
+/// for code and says nothing to somebody correcting an email. Write and prompt mode
+/// count nothing at all: the whole selection was replaced by new text, so a diff
+/// against the brief measures the length of the answer rather than any work done.
 pub fn notification_for(outcome: &FixOutcome, mode: Mode) -> Notification {
     match outcome {
         FixOutcome::Replaced { changes, .. } => Notification {
@@ -46,6 +46,7 @@ pub fn notification_for(outcome: &FixOutcome, mode: Mode) -> Notification {
                     n => format!("Fixed {n} issues"),
                 },
                 Mode::Write => "Written".to_string(),
+                Mode::Prompt => "Prompt ready".to_string(),
             },
             // In code mode the count is detail rather than headline, because it
             // overstates small edits. In grammar mode the summary already carries it.
@@ -56,6 +57,9 @@ pub fn notification_for(outcome: &FixOutcome, mode: Mode) -> Notification {
                 }),
                 Mode::Grammar => None,
                 Mode::Write => Some("Pasted over your brief.".to_string()),
+                // The one mode whose output belongs somewhere else, so the toast says
+                // where it goes rather than only that it landed.
+                Mode::Prompt => Some("Pasted over your request. Send it to your AI.".to_string()),
             },
             urgency: Urgency::Low,
         },
@@ -66,11 +70,13 @@ pub fn notification_for(outcome: &FixOutcome, mode: Mode) -> Notification {
                 // Nothing came back but the brief itself, which is the one thing write
                 // mode is never supposed to return.
                 Mode::Write => "Nothing was written".to_string(),
+                Mode::Prompt => "Prompt unchanged".to_string(),
             },
             body: Some(match mode {
                 Mode::Code => "The code already does what its comments ask for.".to_string(),
                 Mode::Grammar => "No changes needed.".to_string(),
                 Mode::Write => "The model gave back your brief unchanged. Try asking again.".to_string(),
+                Mode::Prompt => "It was already a well-built prompt.".to_string(),
             }),
             urgency: Urgency::Low,
         },
@@ -80,6 +86,7 @@ pub fn notification_for(outcome: &FixOutcome, mode: Mode) -> Notification {
                 Mode::Code => "Select some code, then press the hotkey.".to_string(),
                 Mode::Grammar => "Select some text, then press the hotkey.".to_string(),
                 Mode::Write => "Select what you want written, then press the hotkey.".to_string(),
+                Mode::Prompt => "Select the request you want rewritten, then press the hotkey.".to_string(),
             }),
             urgency: Urgency::Normal,
         },
@@ -235,6 +242,61 @@ mod tests {
         let toast = notification_for(&outcome, Mode::Write);
         assert_eq!(toast.summary, "Nothing was written");
         assert!(toast.body.unwrap().contains("brief unchanged"));
+    }
+
+    #[test]
+    fn prompt_mode_says_where_the_result_is_meant_to_go() {
+        // Every other mode leaves the user done. This one leaves them holding
+        // something to paste somewhere else, so the toast has to say so — otherwise
+        // "Written" over a rewritten request reads as the request having been carried
+        // out.
+        let toast = notification_for(&replaced(12), Mode::Prompt);
+        assert_eq!(toast.summary, "Prompt ready");
+        assert!(toast.body.unwrap().contains("Send it to your AI"));
+    }
+
+    #[test]
+    fn prompt_mode_reads_an_unchanged_selection_as_a_prompt_already_good() {
+        // Unlike write mode, getting the selection back is a fine outcome here: a
+        // well-built prompt has nothing to rebuild.
+        let outcome = FixOutcome::AlreadyCorrect {
+            text: "Build a login page in React. Return one component file.".into(),
+            model: "m".into(),
+            latency_ms: 1,
+            cached: false,
+        };
+        let toast = notification_for(&outcome, Mode::Prompt);
+        assert_eq!(toast.summary, "Prompt unchanged");
+        assert_eq!(toast.urgency, Urgency::Low);
+    }
+
+    #[test]
+    fn every_mode_has_wording_for_every_outcome() {
+        // The match arms are exhaustive, so this catches the other half: a new mode
+        // copy-pasting another's words and telling the user the wrong thing happened.
+        let outcomes = [
+            replaced(3),
+            FixOutcome::AlreadyCorrect {
+                text: "x".into(),
+                model: "m".into(),
+                latency_ms: 1,
+                cached: false,
+            },
+            FixOutcome::NoSelection,
+        ];
+        for outcome in &outcomes {
+            let mut seen: Vec<String> = Vec::new();
+            for mode in Mode::ALL {
+                let toast = notification_for(outcome, mode);
+                let words = format!("{}|{}", toast.summary, toast.body.unwrap_or_default());
+                assert!(!words.is_empty());
+                assert!(
+                    !seen.contains(&words),
+                    "two modes give the same toast for {outcome:?}: {words}"
+                );
+                seen.push(words);
+            }
+        }
     }
 
     #[test]

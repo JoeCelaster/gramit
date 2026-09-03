@@ -113,7 +113,23 @@ describe('POST /v1/fix', () => {
     expect(seenMode).toBe('write');
   });
 
-  it('rejects a mode that is not one of the three', async () => {
+  it('accepts prompt mode', async () => {
+    let seenMode: string | undefined;
+    const app = appWith({
+      async fix(text, mode) {
+        seenMode = mode;
+        return { corrected: text, changed: false, changes: 0, model: 'm', latency_ms: 1, cached: false };
+      },
+    });
+
+    await request(app)
+      .post('/v1/fix')
+      .send({ text: 'make a login page', mode: 'prompt' })
+      .expect(200);
+    expect(seenMode).toBe('prompt');
+  });
+
+  it('rejects a mode it does not serve', async () => {
     const res = await request(appWith(okService))
       .post('/v1/fix')
       .send({ text: 'hello', mode: 'sarcastic' });

@@ -117,14 +117,17 @@ describe('linked content', () => {
     expect(corrector.context).toContain('ten days');
   });
 
-  it('reads no link in code or grammar mode', async () => {
+  it('reads no link in code, grammar or prompt mode', async () => {
     // Those modes transform the selection in front of them. Fetching a URL they happen
     // to contain would cost a round trip and leak where the user's text points.
+    // Prompt mode included: it rewrites the asking, and a URL in a rough request is
+    // context for whichever model the prompt is finally sent to, not for this one.
     const links = fakeLinks([]);
     const service = createFixService({ ...base, corrector: recordingCorrector(), links });
 
     await service.fix('see https://example.com/a', 'grammar');
     await service.fix('// see https://example.com/a', 'code');
+    await service.fix('summarise https://example.com/a', 'prompt');
 
     expect(links.calls).toBe(0);
   });

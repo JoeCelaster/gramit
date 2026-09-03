@@ -13,6 +13,7 @@
 //   code that asks for nothing   → returned unchanged, and it reports "no changes"
 // In grammar mode a few canned corrections are applied instead.
 // In write mode the brief is replaced by a canned piece in the shape it asked for.
+// In prompt mode the rough request is replaced by a canned, structured prompt.
 
 import http from 'node:http';
 
@@ -115,6 +116,29 @@ function compose(text) {
   return `${lead}${body}${trail}`;
 }
 
+/**
+ * Fakes the prompt rewrite with a fixed skeleton wrapped around the rough request.
+ *
+ * The request is quoted rather than carried out, which is the property prompt mode
+ * has to have: a stub that answered "two sum" with code would pass for a working
+ * rewrite while proving nothing.
+ */
+function rebuild(text) {
+  const rough = text.trim();
+  const lead = /^\s*/.exec(text)[0];
+  const trail = /\s*$/.exec(text)[0];
+
+  const body = [
+    `Task: ${rough}.`,
+    '',
+    'Stack: [your language and framework].',
+    'Return: one file, ready to run. No explanation.',
+    'Done when: it runs as written and handles the empty case.',
+  ].join('\n');
+
+  return `${lead}${body}${trail}`;
+}
+
 function countChanges(before, after) {
   if (before === after) return 0;
   const a = before.split(/\s+/);
@@ -165,7 +189,13 @@ const server = http.createServer((req, res) => {
       }
 
       const corrected =
-        mode === 'grammar' ? correct(text) : mode === 'write' ? compose(text) : rewrite(text);
+        mode === 'grammar'
+          ? correct(text)
+          : mode === 'write'
+            ? compose(text)
+            : mode === 'prompt'
+              ? rebuild(text)
+              : rewrite(text);
       console.log(`fix [${mode ?? 'code'}]: ${JSON.stringify(text)} -> ${JSON.stringify(corrected)}`);
       return send(200, {
         corrected,

@@ -42,9 +42,10 @@ export function createFixService(options: FixServiceOptions): FixService {
 
       const started = now();
 
-      // Only write mode uses a link: code and grammar mode transform the selection in
-      // front of them, so fetching a URL they happen to contain would cost a round
-      // trip and leak where the user's text points, for nothing.
+      // Only write mode uses a link. The other modes transform the selection in front
+      // of them, so fetching a URL they happen to contain would cost a round trip and
+      // leak where the user's text points, for nothing — and in prompt mode the URL is
+      // context for whichever model the rewritten prompt is sent to, not for this one.
       const context =
         mode === 'write' && links ? renderLinkContext(await links.read(text)) : null;
 
