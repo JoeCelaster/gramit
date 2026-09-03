@@ -24,7 +24,7 @@ use gramit_core::VERSION;
 #[command(
     name = "gramit",
     version = VERSION,
-    about = "Fix whatever you have selected, anywhere — code or grammar",
+    about = "Fix whatever you have selected, anywhere — grammar, writing, code or prompts",
     long_about = None,
 )]
 struct Cli {
@@ -58,7 +58,7 @@ enum Command {
     Fix(FixArgs),
     /// Show what gramit does with a selection, or change it
     Mode {
-        /// `grammar`, `write` or `code`. Omit it to see the current one.
+        /// `grammar`, `write`, `code` or `prompt`. Omit it to see the current one.
         name: Option<Mode>,
     },
     /// Read or change settings
@@ -107,7 +107,7 @@ struct FixArgs {
     #[arg(long, conflicts_with_all = ["clipboard", "text"])]
     selection: bool,
 
-    /// Override the saved mode for this one fix: `code`, `grammar` or `write`
+    /// Override the saved mode for this one fix: `grammar`, `write`, `code` or `prompt`
     #[arg(long)]
     mode: Option<Mode>,
 }

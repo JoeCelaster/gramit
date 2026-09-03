@@ -162,8 +162,9 @@ In the backend (`backend/src/`):
    gets corrected, not obeyed. Code mode carries out the request in the selection's
    comments; write mode reads the whole selection as an instruction and returns the
    piece it asks for — inferring goal, audience, platform and tone, and applying that
-   platform's conventions — which is the one mode where the selection *is* the
-   instruction
+   platform's conventions; prompt mode reads the selection as a rough request and
+   returns the prompt it should have been, carrying it out being the one thing it must
+   never do. Those last two are the modes where the selection *is* the instruction
 5. `prompt.ts` → `sanitizeCorrection()` unwraps JSON, code fences, "Here's the
    corrected text:" preambles and added quotes, then restores your original leading and
    trailing whitespace

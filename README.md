@@ -11,11 +11,12 @@ place. What it is replaced *with* depends on the mode:
 | `grammar` *(default)* | Fixes grammar, spelling and punctuation. Your wording, voice and formatting are left alone |
 | `write` | Writes what you asked for. The selection is the brief — an email, an essay, a paragraph — and is replaced by the finished piece |
 | `code` | Writes and fixes code. A request in the selection's comments is the task |
+| `prompt` | Rebuilds a rough request into a prompt worth sending an AI. You paste the result into your assistant, not into your file |
 
 
-Grammar is the default because it only ever repairs what is already there. Code and
-write mode both replace the selection with something new, so you opt into them rather
-than land on them.
+Grammar is the default because it only ever repairs what is already there. Code,
+write and prompt mode all replace the selection with something new, so you opt into
+them rather than land on them.
 
 One mode is active at a time, because the hotkey carries no argument. `gramit start`
 asks which one with an arrow-key picker:
@@ -27,11 +28,12 @@ What should gramit do with the text you select?
   › grammar  fix grammar, spelling and punctuation — wording is left alone
     write    write what you ask for — the selection is the brief, not the text
     code     write and fix code — comments in the selection are the request
+    prompt   turn a rough request into a prompt worth sending an AI
 ```
 
-Or switch any time with `gramit mode code` / `gramit mode grammar` / `gramit mode
-write`, which saves the setting and restarts the daemon so it takes effect
-immediately.
+Or switch any time with `gramit mode grammar` / `gramit mode write` / `gramit mode
+code` / `gramit mode prompt`, which saves the setting and restarts the daemon so it
+takes effect immediately.
 
 ## Code mode
 
@@ -137,6 +139,53 @@ turn these notes into a short report:
 ```
 
 and every fact in the notes survives into the report, while the instruction line goes.
+
+## Prompt mode
+
+`gramit mode prompt` is the one mode whose output is meant to go somewhere else. You
+type the six words you were about to send an AI, select them, press the hotkey, and get
+back the prompt you should have sent — which you then paste into Claude, ChatGPT,
+Cursor, or whatever is in front of you.
+
+```
+make a login page
+```
+
+becomes a prompt that names the fields, the validation and error states, what to
+return, and marks the framework as `[your framework]` because you never said which one.
+
+It works out what you are asking for before it rewrites anything: the thing to produce,
+the shape the answer has to take, the facts you already gave, and the decisions a model
+would otherwise make silently. Then it picks the skeleton the ask deserves — building,
+debugging, planning, reviewing, explaining, or writing — and fills it in:
+
+```
+why is my code slow
+```
+
+comes back asking for the cause before the fix, with `[paste the code here]` and
+`[the input size it is slow on]` marked as yours to fill in, and the answer requested
+as a ranked list of causes with evidence.
+
+```
+plan a chat app
+```
+
+comes back as an ordered set of milestones with the risks and the decisions each one
+settles, and `[scale]`, `[platform]` and `[deadline]` left as placeholders.
+
+**Nothing is invented.** Your language, framework, versions, file names and quoted
+strings survive exactly as you typed them. What you did not say arrives as a bracket
+you can see rather than a requirement you did not ask for — no OAuth, no Dockerfile,
+no test suite bolted onto a request that never mentioned them. If you named no stack at
+all, the prompt tells the model to choose one and say which it chose.
+
+**It never answers the request.** Select "two sum in java" in prompt mode and you get a
+prompt about two sum, not an implementation of it — that is what code mode is for.
+
+The prompt is sized to the ask: six words in gives you a tight paragraph, not a page of
+headings. No flattery, no "world-class expert", no "think step by step" bolted onto a
+request that needs no reasoning.
 
 ```
 gramit (CLI) ──local socket──> gramitd (daemon) ──HTTP──> backend ──> Azure OpenAI
@@ -267,6 +316,7 @@ gramit fix --clipboard           # fix the clipboard in place
 gramit fix --selection           # capture the selection, fix it, paste it back
 gramit fix "..." --mode grammar  # override the mode for this one fix
 gramit fix "mail to ravi about my leave on 28 aug" --mode write
+gramit fix "make a login page" --mode prompt
 
 gramit version                   # which version is this, and what is the daemon running?
 gramit update --check            # is there a newer release?
@@ -313,7 +363,7 @@ what an update looks like until you restart.
 |---|---|---|
 | `hotkey` | `Ctrl+Alt+F` | The shortcut that fixes the selection. `Alt` means the Option (⌥) key on macOS; `Option` is accepted as a spelling too |
 | `backend_url` | *(none — you set it)* | Backend that does the fixing |
-| `mode` | `grammar` | `code`, `grammar` or `write`. Prefer `gramit mode <name>`, which also applies it |
+| `mode` | `grammar` | `grammar`, `write`, `code` or `prompt`. Prefer `gramit mode <name>`, which also applies it |
 | `notifications` | `true` | Show a toast for each fix |
 | `max_chars` | `16000` | Refuse selections longer than this |
 | `request_timeout_ms` | `15000` | Give up on the backend after this long |

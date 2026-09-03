@@ -71,8 +71,9 @@ node backend/dev-stub.mjs
 It applies a handful of canned substitutions (`he go` → `he goes`, `teh` → `the`,
 `buyed` → `bought`, capitalise, add a full stop) instead of calling a model. Same URLs,
 same response shape, so gramit cannot tell the difference. Every mode is served: code
-mode gets a stub call in place of the request comment, and write mode gets a canned
-email, essay or paragraph in the shape the brief asked for.
+mode gets a stub call in place of the request comment, write mode gets a canned email,
+essay or paragraph in the shape the brief asked for, and prompt mode gets a canned
+prompt skeleton wrapped around the request rather than an answer to it.
 
 Stop it with `Ctrl+C`, or `pkill -f dev-stub.mjs`.
 

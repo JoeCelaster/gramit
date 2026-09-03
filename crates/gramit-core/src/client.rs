@@ -256,6 +256,7 @@ mod tests {
             (Mode::Code, "code"),
             (Mode::Grammar, "grammar"),
             (Mode::Write, "write"),
+            (Mode::Prompt, "prompt"),
         ] {
             let body = FixRequestBody { text: "x", mode };
             let json = serde_json::to_string(&body).unwrap();

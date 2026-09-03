@@ -71,8 +71,8 @@ pub enum Mode {
     /// Grammar, spelling, punctuation only — preserves the author's voice.
     ///
     /// The default, because it is the safe one to press a hotkey on by accident: it
-    /// only ever repairs what is already there. Code and write mode both replace the
-    /// selection with something new, so they are opted into rather than landed on.
+    /// only ever repairs what is already there. Code, write and prompt mode all replace
+    /// the selection with something new, so they are opted into rather than landed on.
     #[default]
     Grammar,
     /// Read the selection as a brief — "write a mail to Ravi saying I am on leave on
@@ -84,15 +84,24 @@ pub enum Mode {
     /// back code: the same block carried out, or a whole program when the selection is
     /// only a request like "Write Java code for two sum".
     Code,
+    /// Read the selection as a rough prompt — "make a login page", "why is my code
+    /// slow", "plan a chat app" — and replace it with the prompt it should have been:
+    /// the task stated plainly, the constraints the user already gave, the shape the
+    /// answer must take, and square-bracket placeholders where only the user knows.
+    ///
+    /// The one mode whose output is meant to be pasted somewhere else. Nothing is
+    /// carried out here; the request is rebuilt, not answered.
+    Prompt,
 }
 
 impl Mode {
     /// Every mode, in the order they are offered at the prompt.
     ///
     /// Grammar first because it is the default and the safe one; write next, because
-    /// it is what most people reach for after it; code last, since it is the one you
-    /// go looking for on purpose.
-    pub const ALL: [Mode; 3] = [Mode::Grammar, Mode::Write, Mode::Code];
+    /// it is what most people reach for after it; then code, since it is the one you go
+    /// looking for on purpose. Prompt is appended rather than slotted in beside write,
+    /// so the menu numbers people already type keep meaning what they meant.
+    pub const ALL: [Mode; 4] = [Mode::Grammar, Mode::Write, Mode::Code, Mode::Prompt];
 
     /// One line of help, for the mode prompt and `gramit mode` with no argument.
     pub fn summary(&self) -> &'static str {
@@ -100,6 +109,7 @@ impl Mode {
             Mode::Grammar => "fix grammar, spelling and punctuation — wording is left alone",
             Mode::Write => "write what you ask for — the selection is the brief, not the text",
             Mode::Code => "write and fix code — comments in the selection are the request",
+            Mode::Prompt => "turn a rough request into a prompt worth sending an AI",
         }
     }
 }
@@ -112,6 +122,7 @@ impl std::fmt::Display for Mode {
             Mode::Grammar => "grammar",
             Mode::Write => "write",
             Mode::Code => "code",
+            Mode::Prompt => "prompt",
         })
     }
 }
@@ -124,7 +135,10 @@ impl std::str::FromStr for Mode {
             "grammar" | "g" | "text" => Ok(Mode::Grammar),
             "write" | "w" | "compose" => Ok(Mode::Write),
             "code" | "c" => Ok(Mode::Code),
-            other => Err(format!("unknown mode {other:?} (expected: code, grammar or write)")),
+            "prompt" | "p" | "ai" => Ok(Mode::Prompt),
+            other => Err(format!(
+                "unknown mode {other:?} (expected: grammar, write, code or prompt)"
+            )),
         }
     }
 }
@@ -413,6 +427,8 @@ mod tests {
         assert_eq!(" GRAMMAR ".parse::<Mode>().unwrap(), Mode::Grammar);
         assert_eq!("write".parse::<Mode>().unwrap(), Mode::Write);
         assert_eq!(" WRITE ".parse::<Mode>().unwrap(), Mode::Write);
+        assert_eq!("prompt".parse::<Mode>().unwrap(), Mode::Prompt);
+        assert_eq!(" PROMPT ".parse::<Mode>().unwrap(), Mode::Prompt);
         assert!("sarcastic".parse::<Mode>().is_err());
     }
 
@@ -422,6 +438,7 @@ mod tests {
         assert_eq!(format!("[{:<8}]", Mode::Code), "[code    ]");
         assert_eq!(format!("{}", Mode::Grammar), "grammar");
         assert_eq!(format!("[{:<8}]", Mode::Write), "[write   ]");
+        assert_eq!(format!("[{:<8}]", Mode::Prompt), "[prompt  ]");
     }
 
     #[test]
@@ -430,6 +447,23 @@ mod tests {
         assert_eq!("c".parse::<Mode>().unwrap(), Mode::Code);
         assert_eq!("g".parse::<Mode>().unwrap(), Mode::Grammar);
         assert_eq!("w".parse::<Mode>().unwrap(), Mode::Write);
+        assert_eq!("p".parse::<Mode>().unwrap(), Mode::Prompt);
+    }
+
+    #[test]
+    fn every_mode_has_its_own_name_and_letter() {
+        // Two modes sharing a letter would make the single-letter shorthand pick one
+        // of them arbitrarily, and the mode menu prints both as if either would work.
+        let mut seen = Vec::new();
+        for mode in Mode::ALL {
+            let name = mode.to_string();
+            let letter = name.chars().next().unwrap().to_string();
+            assert!(!seen.contains(&name), "two modes are called {name:?}");
+            assert!(!seen.contains(&letter), "two modes start with {letter:?}");
+            assert_eq!(letter.parse::<Mode>().unwrap(), mode);
+            seen.push(name);
+            seen.push(letter);
+        }
     }
 
     #[test]
