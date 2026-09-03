@@ -336,7 +336,7 @@ gramit version                gramit update [--check] [--yes]
 ## Updating
 
 ```bash
-gramit version         # 1.0.0, and whether the running daemon is on the same one
+gramit version         # 1.1.0, and whether the running daemon is on the same one
 gramit update --check  # ask GitHub for the latest release, change nothing
 gramit update          # install it, after asking
 ```
@@ -429,7 +429,7 @@ backend/               Node + Express + Azure OpenAI
 Tag and push; `.github/workflows/release.yml` does the rest.
 
 ```bash
-git tag v1.0.0 && git push origin v1.0.0
+git tag v1.1.0 && git push origin v1.1.0
 ```
 
 It refuses a tag that disagrees with `[workspace.package] version` in `Cargo.toml`,
