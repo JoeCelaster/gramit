@@ -4,7 +4,7 @@
 
 **Select anything → press `Ctrl+Alt+F` → tell Gramit what to do.**
 
-Gramit is a keyboard-first AI assistant for **People who sit infront of computers and developers**. It works across your computer, so you can transform selected text or code without switching to ChatGPT, Claude, or another app.
+Gramit is a keyboard-first AI assistant for **People who sit infront of computers and developers**. It works across your computer, so you can transform selected text or code without switching to ChatGPT, Claude or gemini.
 
 ```text
 Tell Gramit what you want in terminal
