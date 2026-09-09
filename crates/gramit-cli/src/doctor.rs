@@ -41,12 +41,15 @@ impl Findings {
 }
 
 pub async fn run(apply_fixes: bool) -> Result<()> {
-    let mut findings = Findings::default();
+     let mut findings = Findings::default();
+
+    println!();
+    println!("Gramit Doctor v{}", env!("CARGO_PKG_VERSION"));
     println!();
 
     let config = check_config(&mut findings);
     let status = check_daemon(&mut findings).await;
-    check_backend(&mut findings, config.as_ref(), status.as_deref()).await;
+    check_backend(&mut findings, config.as_ref(), status.as_deref());
     check_typing(&mut findings, status.as_deref());
     check_hotkey(&mut findings, config.as_ref(), status.as_deref(), apply_fixes);
 
